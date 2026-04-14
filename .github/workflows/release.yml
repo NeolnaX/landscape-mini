@@ -161,5 +161,4 @@ jobs:
         with:
           files: |
             artifacts/**/*.img.gz
-            artifacts/**/*.txt
           generate_release_notes: true

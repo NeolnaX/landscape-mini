@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-04-14
+
+### Fixed / 修复
+
+- Publish only release image archives and stop uploading duplicate metadata files as GitHub release assets / 发布时仅上传镜像压缩包，不再将重复的 metadata 文件作为 GitHub release 资产上传
+
 ## [0.2.5] - 2026-04-14
 
 ### Fixed / 修复
@@ -120,7 +126,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add concurrency group to prevent duplicate CI runs / 添加并发组以防止 CI 重复运行 (`ee11fe2`)
 - Add contents write permission for release job / 为发布任务添加内容写入权限 (`97b6240`)
 
-[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/Cloud370/landscape-mini/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Cloud370/landscape-mini/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Cloud370/landscape-mini/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Cloud370/landscape-mini/compare/v0.2.2...v0.2.3
