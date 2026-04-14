@@ -33,6 +33,7 @@ source "${SCRIPT_DIR}/common.sh"
 IMAGE_PATH="${1:-${PROJECT_DIR}/output/landscape-mini-x86.img}"
 SSH_PORT="${SSH_PORT:-2222}"
 WEB_PORT="${WEB_PORT:-9800}"
+LANDSCAPE_CONTROL_PORT="${LANDSCAPE_CONTROL_PORT:-6443}"
 QEMU_MEM="${QEMU_MEM:-1024}"
 QEMU_SMP="${QEMU_SMP:-2}"
 SSH_PASSWORD="landscape"
@@ -149,7 +150,7 @@ start_qemu() {
         "${bios_args[@]}" \
         -drive "file=${TEMP_IMAGE},format=raw,if=virtio" \
         -device virtio-net-pci,netdev=wan \
-        -netdev "user,id=wan,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${WEB_PORT}-:9800" \
+        -netdev "user,id=wan,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${WEB_PORT}-:${LANDSCAPE_CONTROL_PORT}" \
         -device virtio-net-pci,netdev=lan \
         -netdev user,id=lan \
         -display none \
@@ -349,13 +350,8 @@ run_all_checks() {
     run_check "Landscape binary exists and is executable" \
         guest_run "test -x /root/landscape-webserver"
 
-    if detect_landscape_api_base; then
-        local web_port="${API_BASE##*:}"
-        run_check "Web UI listening on port ${web_port}" \
-            guest_run "curl -skI --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} ${API_BASE}/ -o /dev/null"
-    else
-        run_check "Web UI listening" false
-    fi
+    run_check "Web UI listening on port ${LANDSCAPE_CONTROL_PORT}" \
+        guest_run "curl -skI --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} https://localhost:${LANDSCAPE_CONTROL_PORT}/ -o /dev/null"
 
     local ip_fwd
     ip_fwd=$(guest_run "sysctl -n net.ipv4.ip_forward" 2>/dev/null)

@@ -241,6 +241,7 @@ API_LAYOUT="${API_LAYOUT:-}"
 API_AUTH_PATH="${API_AUTH_PATH:-/api/auth/login}"
 API_USERNAME="${API_USERNAME:-root}"
 API_PASSWORD="${API_PASSWORD:-root}"
+LANDSCAPE_CONTROL_PORT="${LANDSCAPE_CONTROL_PORT:-6443}"
 
 _landscape_api_preferred_prefixes() {
     case "${API_LAYOUT:-}" in
@@ -364,49 +365,15 @@ _landscape_api_get_operation() {
 }
 
 detect_landscape_api_base() {
-    local web_port=""
-    local web_wait=0
+    API_BASE="https://localhost:${LANDSCAPE_CONTROL_PORT}"
 
-    while [[ $web_wait -lt 60 ]]; do
-        local ports
-        ports=$(guest_run "ss -tlnp 2>/dev/null | grep landscape-webse || true" 2>/dev/null \
-            | awk '{print $4}' | awk -F: '{print $NF}' | sort -rn || true)
-        local highest
-        highest=$(echo "$ports" | head -1)
-        local count
-        count=$(echo "$ports" | wc -w || true)
-
-        if [[ -n "$highest" && "$count" -ge 2 ]]; then
-            web_port="$highest"
-            break
-        elif [[ -n "$highest" && "$highest" -gt 6400 ]]; then
-            web_port="$highest"
-            break
-        fi
-
-        sleep 3
-        ((web_wait += 3))
-        if ((web_wait % 15 == 0)); then
-            info "  ...waiting for landscape to fully initialize (${web_wait}s, ports: ${ports:-none})"
-        fi
-    done
-
-    if [[ -z "$web_port" ]]; then
-        web_port=$(guest_run "ss -tlnp 2>/dev/null | grep landscape-webse | head -1 | awk '{print $4}' | awk -F: '{print $NF}'" 2>/dev/null || true)
+    if guest_run "curl -skI --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} ${API_BASE}/ -o /dev/null" &>/dev/null; then
+        info "API base: ${API_BASE}"
+        return 0
     fi
 
-    if [[ -z "$web_port" ]]; then
-        error "Landscape web service not listening after 60s"
-        return 1
-    fi
-
-    if guest_run "curl -sf --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} http://localhost:${web_port}/ -o /dev/null" &>/dev/null; then
-        API_BASE="http://localhost:${web_port}"
-    else
-        API_BASE="https://localhost:${web_port}"
-    fi
-
-    info "API base: ${API_BASE}"
+    error "Landscape API not reachable at ${API_BASE}"
+    return 1
 }
 
 landscape_api_login() {
@@ -424,18 +391,28 @@ landscape_api_login() {
 
 detect_landscape_api_layout() {
     local token="$1"
+    local elapsed=0
+    local timeout="${2:-60}"
 
-    if landscape_api_get_path "$token" '/api/v1/services/dhcp_v4/status' &>/dev/null; then
-        API_LAYOUT='v1'
-        info "Detected API layout: ${API_LAYOUT}"
-        return 0
-    fi
+    while [[ $elapsed -lt $timeout ]]; do
+        if landscape_api_get_path "$token" '/api/v1/services/dhcp_v4/status' &>/dev/null; then
+            API_LAYOUT='v1'
+            info "Detected API layout: ${API_LAYOUT}"
+            return 0
+        fi
 
-    if landscape_api_get_path "$token" '/api/src/services/dhcp_v4/status' &>/dev/null; then
-        API_LAYOUT='src'
-        info "Detected API layout: ${API_LAYOUT}"
-        return 0
-    fi
+        if landscape_api_get_path "$token" '/api/src/services/dhcp_v4/status' &>/dev/null; then
+            API_LAYOUT='src'
+            info "Detected API layout: ${API_LAYOUT}"
+            return 0
+        fi
+
+        sleep 3
+        ((elapsed += 3))
+        if ((elapsed % 15 == 0)); then
+            info "  ...waiting for supported API layout (${elapsed}s)"
+        fi
+    done
 
     error 'Unable to detect supported API layout'
     return 1

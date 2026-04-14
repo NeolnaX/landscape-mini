@@ -42,6 +42,7 @@ source "${SCRIPT_DIR}/common.sh"
 IMAGE_PATH="${1:-${PROJECT_DIR}/output/landscape-mini-x86.img}"
 SSH_PORT="${SSH_PORT:-2222}"
 WEB_PORT="${WEB_PORT:-9800}"
+LANDSCAPE_CONTROL_PORT="${LANDSCAPE_CONTROL_PORT:-6443}"
 QEMU_MEM="${QEMU_MEM:-1024}"
 QEMU_SMP="${QEMU_SMP:-2}"
 SSH_PASSWORD="landscape"
@@ -216,7 +217,7 @@ start_router() {
         "${bios_args[@]}" \
         -drive "file=${TEMP_IMAGE},format=raw,if=virtio" \
         -device virtio-net-pci,netdev=wan,mac=${ROUTER_WAN_MAC} \
-        -netdev "user,id=wan,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${WEB_PORT}-:9800" \
+        -netdev "user,id=wan,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${WEB_PORT}-:${LANDSCAPE_CONTROL_PORT}" \
         -device virtio-net-pci,netdev=lan,mac=${ROUTER_LAN_MAC} \
         -netdev "socket,id=lan,mcast=${MCAST_ADDR}:${MCAST_PORT}" \
         -display none \
