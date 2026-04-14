@@ -392,16 +392,34 @@ detect_landscape_api_base() {
 
 landscape_api_login() {
     local payload payload_q content_type_q url_q login_resp token
+    local elapsed=0
+    local timeout="${1:-${LANDSCAPE_API_READY_TIMEOUT}}"
+    local interval="${2:-${LANDSCAPE_API_READY_INTERVAL}}"
 
     payload=$(jq -cn --arg username "$API_USERNAME" --arg password "$API_PASSWORD" '{username:$username,password:$password}')
     printf -v payload_q '%q' "$payload"
     printf -v content_type_q '%q' 'Content-Type: application/json'
     printf -v url_q '%q' "${API_BASE}${API_AUTH_PATH}"
 
-    login_resp=$(guest_run "curl -sfkL --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} -H ${content_type_q} -X POST -d ${payload_q} ${url_q}" 2>/dev/null) || return 1
-    token=$(echo "$login_resp" | jq -r '.data.token // empty')
-    echo "$token"
+    while [[ $elapsed -lt $timeout ]]; do
+        login_resp=$(guest_run "curl -sfkL --max-time ${LANDSCAPE_TEST_HTTP_TIMEOUT} -H ${content_type_q} -X POST -d ${payload_q} ${url_q}" 2>/dev/null) || login_resp=""
+        token=$(echo "$login_resp" | jq -r '.data.token // empty' 2>/dev/null || true)
+
+        if [[ -n "$token" ]]; then
+            echo "$token"
+            return 0
+        fi
+
+        sleep "${interval}"
+        ((elapsed += interval))
+        if ((elapsed < timeout)) && ((elapsed % 15 == 0)); then
+            info "  ...waiting for Landscape API auth (${elapsed}s)" >&2
+        fi
+    done
+
+    return 1
 }
+
 
 detect_landscape_api_layout() {
     local token="$1"

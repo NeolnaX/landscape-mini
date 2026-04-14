@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       landscape_version:
-        description: "Landscape version (latest or tag)"
-        default: "latest"
+        description: "Landscape version (latest or tag; empty uses build.env default)"
+        default: ""
   pull_request:
     branches:
       - main
@@ -74,9 +74,13 @@ jobs:
 
       - name: Build Image (${{ matrix.variant }})
         run: |
-          VERSION="${{ github.event.inputs.landscape_version || 'latest' }}"
+          VERSION="${{ github.event.inputs.landscape_version }}"
+          VERSION_FLAG=""
+          if [ -n "$VERSION" ]; then
+            VERSION_FLAG="--version $VERSION"
+          fi
           sudo APT_MIRROR="" ALPINE_MIRROR="" OUTPUT_FORMAT=img COMPRESS_OUTPUT=no \
-            ./build.sh --version "$VERSION" ${{ matrix.build_flags }}
+            ./build.sh $VERSION_FLAG ${{ matrix.build_flags }}
 
       - name: Fix output permissions
         run: sudo chown -R "$(id -u):$(id -g)" output/ work/

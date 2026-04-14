@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- Harden CI and release test stability by retrying API login, using less brittle tool detection, and aligning CI's default Landscape version with release builds / 通过重试 API 登录、改进工具探测稳定性，并让 CI 默认 Landscape 版本与 release 保持一致，提升 CI 与发布测试稳定性
+
 ## [0.2.3] - 2026-04-14
 
 ### Changed / 变更

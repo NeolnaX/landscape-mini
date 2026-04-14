@@ -370,9 +370,9 @@ run_all_checks() {
         check_no_failed_services
 
     run_check "bpftool available" \
-        guest_run "which bpftool"
+        guest_run "command -v bpftool >/dev/null 2>&1 || test -x /usr/sbin/bpftool || test -x /usr/bin/bpftool"
 
-    if guest_run "which docker" &>/dev/null; then
+    if guest_run "command -v docker >/dev/null 2>&1 || test -x /usr/bin/docker || test -x /usr/sbin/docker" &>/dev/null; then
         run_check "Docker service active" \
             check_service_active "docker"
     else
