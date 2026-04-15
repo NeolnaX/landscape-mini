@@ -342,7 +342,22 @@ backend_install_docker() {
     echo "==== Phase 6: Installing Docker (Alpine) ===="
 
     run_in_chroot "
-        apk add docker docker-cli-compose docker-cli-buildx
+        retry() {
+            local attempt
+            for attempt in 1 2 3; do
+                if \"\$@\"; then
+                    return 0
+                fi
+                if [ \"\$attempt\" -eq 3 ]; then
+                    echo \"Command failed after \${attempt} attempts: \$*\" >&2
+                    return 1
+                fi
+                echo \"Command failed on attempt \${attempt}, retrying: \$*\" >&2
+                sleep 5
+            done
+        }
+
+        retry apk add docker docker-cli-compose docker-cli-buildx
     "
 
     # Configure Docker daemon

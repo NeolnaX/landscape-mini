@@ -290,15 +290,49 @@ backend_install_docker() {
 
     # Install prerequisites
     run_in_chroot "
+        retry() {
+            local attempt
+            for attempt in 1 2 3; do
+                if \"\$@\"; then
+                    return 0
+                fi
+                if [ \"\$attempt\" -eq 3 ]; then
+                    echo \"Command failed after \${attempt} attempts: \$*\" >&2
+                    return 1
+                fi
+                echo \"Command failed on attempt \${attempt}, retrying: \$*\" >&2
+                sleep 5
+            done
+        }
+
         export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y --no-install-recommends ca-certificates curl
+        retry apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=60 \
+            -o Acquire::https::Timeout=60 \
+            install -y --no-install-recommends ca-certificates curl
         install -m 0755 -d /etc/apt/keyrings
     "
 
     # Add Docker GPG key
     echo "  Adding Docker GPG key ..."
     run_in_chroot "
-        curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+        retry() {
+            local attempt
+            for attempt in 1 2 3; do
+                if \"\$@\"; then
+                    return 0
+                fi
+                if [ \"\$attempt\" -eq 3 ]; then
+                    echo \"Command failed after \${attempt} attempts: \$*\" >&2
+                    return 1
+                fi
+                echo \"Command failed on attempt \${attempt}, retrying: \$*\" >&2
+                sleep 5
+            done
+        }
+
+        retry curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
         chmod a+r /etc/apt/keyrings/docker.asc
     "
 
@@ -307,16 +341,54 @@ backend_install_docker() {
     local ARCH
     ARCH=$(run_in_chroot "dpkg --print-architecture")
     run_in_chroot "
+        retry() {
+            local attempt
+            for attempt in 1 2 3; do
+                if \"\$@\"; then
+                    return 0
+                fi
+                if [ \"\$attempt\" -eq 3 ]; then
+                    echo \"Command failed after \${attempt} attempts: \$*\" >&2
+                    return 1
+                fi
+                echo \"Command failed on attempt \${attempt}, retrying: \$*\" >&2
+                sleep 5
+            done
+        }
+
         echo 'deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian ${DEBIAN_RELEASE} stable' \
             > /etc/apt/sources.list.d/docker.list
-        apt-get update -y
+        retry apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=60 \
+            -o Acquire::https::Timeout=60 \
+            update -y
     "
 
     # Install Docker packages
     echo "  Installing Docker packages ..."
     run_in_chroot "
+        retry() {
+            local attempt
+            for attempt in 1 2 3; do
+                if \"\$@\"; then
+                    return 0
+                fi
+                if [ \"\$attempt\" -eq 3 ]; then
+                    echo \"Command failed after \${attempt} attempts: \$*\" >&2
+                    return 1
+                fi
+                echo \"Command failed on attempt \${attempt}, retrying: \$*\" >&2
+                sleep 5
+            done
+        }
+
         export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y --no-install-recommends \
+        retry apt-get \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=60 \
+            -o Acquire::https::Timeout=60 \
+            install -y --no-install-recommends \
             docker-ce \
             docker-ce-cli \
             containerd.io \
