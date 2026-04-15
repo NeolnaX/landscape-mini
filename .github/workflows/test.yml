@@ -24,7 +24,6 @@ on:
 
 jobs:
   test:
-    if: ${{ github.event.inputs.artifact_id == '' || startsWith(github.event.inputs.artifact_id, format('{0}-docker-{1}-', matrix.base_system, matrix.include_docker)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -115,6 +114,7 @@ jobs:
             install -y sshpass socat curl jq qemu-system-x86 ovmf unzip
 
       - name: Resolve artifact names
+        if: ${{ github.event.inputs.artifact_id == '' || startsWith(github.event.inputs.artifact_id, format('{0}-docker-{1}-', matrix.base_system, matrix.include_docker)) }}
         id: meta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -157,6 +157,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Download image artifact
+        if: ${{ steps.meta.conclusion == 'success' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.meta.outputs.image_artifact }}
@@ -165,6 +166,7 @@ jobs:
           run-id: ${{ steps.meta.outputs.resolved_run_id }}
 
       - name: Restore build metadata into test logs
+        if: ${{ steps.meta.conclusion == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,9 +189,11 @@ jobs:
           fi
 
       - name: List outputs
+        if: ${{ steps.meta.conclusion == 'success' }}
         run: ls -lh output/
 
       - name: Run readiness checks (${{ matrix.base_system }}, docker=${{ matrix.include_docker }})
+        if: ${{ steps.meta.conclusion == 'success' }}
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ matrix.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ matrix.include_docker }}
@@ -203,7 +207,7 @@ jobs:
         run: timeout --foreground 20m ./tests/test-readiness.sh output/*.img
 
       - name: Run dataplane tests (${{ matrix.base_system }}, docker=${{ matrix.include_docker }})
-        if: ${{ matrix.include_docker == 'false' }}
+        if: ${{ steps.meta.conclusion == 'success' && matrix.include_docker == 'false' }}
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ matrix.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ matrix.include_docker }}
@@ -217,7 +221,7 @@ jobs:
         run: timeout --foreground 25m ./tests/test-dataplane.sh output/*.img
 
       - name: Upload test logs
-        if: always()
+        if: ${{ always() && steps.meta.conclusion == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: test-logs-retest-${{ steps.meta.outputs.artifact_id }}
