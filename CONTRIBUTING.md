@@ -92,7 +92,7 @@ chore: release v0.2.3
 
 本仓库当前的正确发版顺序：
 
-**main 可发布 → 整理 changelog → release commit → push main → 等对应 CI 成功 → 打 tag → push tag → promotion release**
+**main 可发布 → 整理 changelog → 创建 release commit → push main → 等对应 CI 成功 → 打 tag → push tag → 执行 release promotion**
 
 示例：
 
@@ -112,7 +112,7 @@ git push origin v0.2.3
 ```
 
 `release.yml` 现在只会：
-- 查找 tag 指向 commit 在 `main` 上对应的成功 `ci.yml` run
+- 查找该 tag 所指向 commit 在 `main` 上对应的成功 `ci.yml` 运行记录
 - 下载那次 CI 已验证的 4 个 variant artifacts
 - 校验 metadata / git SHA / variant 完整性
 - 压缩 `.img` 并创建 GitHub Release
