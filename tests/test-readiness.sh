@@ -92,7 +92,7 @@ preflight() {
     load_landscape_topology || exit 2
     landscape_router_init_paths "health"
 
-    LANDSCAPE_TEST_VARIANT="${LANDSCAPE_TEST_VARIANT:-$(landscape_guess_variant_from_image_path "${IMAGE_PATH}")}"
+    landscape_load_test_identity "${IMAGE_PATH}" || true
     LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_TEST_LANDSCAPE_VERSION:-$(resolve_default_landscape_version)}"
     landscape_write_test_metadata "${IMAGE_PATH}"
 
@@ -140,10 +140,10 @@ run_smoke_checks() {
     ip_forward="$(guest_run "cat /proc/sys/net/ipv4/ip_forward" 2>/dev/null || true)"
     run_check "IP forwarding enabled" test "$ip_forward" = "1"
 
-    if landscape_variant_requires_docker; then
-        run_check "Docker variant is functional" docker_functional_check
+    if landscape_test_requires_docker; then
+        run_check "Docker image is functional" docker_functional_check
     else
-        run_skip "Docker variant is functional" "Docker not expected for ${LANDSCAPE_TEST_VARIANT}"
+        run_skip "Docker image is functional" "Docker not expected for include_docker=${LANDSCAPE_TEST_INCLUDE_DOCKER:-unknown}"
     fi
 
     echo ""

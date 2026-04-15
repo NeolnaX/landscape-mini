@@ -289,7 +289,7 @@ EOF
 # Phase 6: Optional Docker Installation (Debian)
 # =============================================================================
 backend_install_docker() {
-    if [[ "${INCLUDE_DOCKER}" != "yes" ]]; then
+    if [[ "${INCLUDE_DOCKER}" != "true" ]]; then
         echo ""
         echo "==== Phase 6: Docker Installation (skipped) ===="
         return 0

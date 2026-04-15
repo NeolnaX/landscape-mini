@@ -116,7 +116,7 @@ preflight() {
     CLIENT_RESULTS_FILE="${LANDSCAPE_RESULTS_FILE}"
     rm -f "${CLIENT_SERIAL_LOG}" "${CLIENT_DIAGNOSTICS_FILE}"
 
-    LANDSCAPE_TEST_VARIANT="${LANDSCAPE_TEST_VARIANT:-$(landscape_guess_variant_from_image_path "${IMAGE_PATH}")}"
+    landscape_load_test_identity "${IMAGE_PATH}" || true
     LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_TEST_LANDSCAPE_VERSION:-$(resolve_default_landscape_version)}"
     landscape_write_test_metadata "${IMAGE_PATH}"
 

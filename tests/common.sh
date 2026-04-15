@@ -392,30 +392,67 @@ load_landscape_topology() {
     )
 }
 
-landscape_guess_variant_from_image_path() {
-    local image_path="$1"
-    local base
-    base="$(basename "$image_path")"
+LANDSCAPE_TEST_BASE_SYSTEM="${LANDSCAPE_TEST_BASE_SYSTEM:-}"
+LANDSCAPE_TEST_INCLUDE_DOCKER="${LANDSCAPE_TEST_INCLUDE_DOCKER:-}"
+LANDSCAPE_TEST_OUTPUT_FORMATS="${LANDSCAPE_TEST_OUTPUT_FORMATS:-}"
 
-    case "$base" in
-        *alpine-docker*.img)
-            echo "alpine-docker"
-            ;;
-        *alpine*.img)
-            echo "alpine"
-            ;;
-        *docker*.img)
-            echo "docker"
-            ;;
-        *)
-            echo "default"
-            ;;
-    esac
+load_build_metadata_from_image() {
+    local image_path="$1"
+    local image_dir metadata_path
+
+    image_dir="$(cd "$(dirname "$image_path")" && pwd)"
+    metadata_path="${image_dir}/metadata/build-metadata.txt"
+
+    if [[ ! -f "${metadata_path}" && -f "${PROJECT_DIR:-$(pwd)}/output/metadata/build-metadata.txt" ]]; then
+        metadata_path="${PROJECT_DIR:-$(pwd)}/output/metadata/build-metadata.txt"
+    fi
+
+    if [[ -f "${metadata_path}" ]]; then
+        printf '%s\n' "${metadata_path}"
+        return 0
+    fi
+
+    return 1
 }
 
-landscape_variant_requires_docker() {
-    local variant="${LANDSCAPE_TEST_VARIANT:-${LANDSCAPE_IMAGE_PATH:+$(landscape_guess_variant_from_image_path "${LANDSCAPE_IMAGE_PATH}")}}"
-    [[ "$variant" == *docker* ]]
+landscape_load_test_identity() {
+    local image_path="${1:-${LANDSCAPE_IMAGE_PATH:-}}"
+    local metadata_path key value
+
+    if [[ -n "${LANDSCAPE_TEST_BASE_SYSTEM}" && -n "${LANDSCAPE_TEST_INCLUDE_DOCKER}" ]]; then
+        return 0
+    fi
+
+    if [[ -z "${image_path}" ]]; then
+        return 1
+    fi
+
+    metadata_path="$(load_build_metadata_from_image "${image_path}")" || return 1
+
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            base_system)
+                LANDSCAPE_TEST_BASE_SYSTEM="${LANDSCAPE_TEST_BASE_SYSTEM:-${value}}"
+                ;;
+            include_docker)
+                LANDSCAPE_TEST_INCLUDE_DOCKER="${LANDSCAPE_TEST_INCLUDE_DOCKER:-${value}}"
+                ;;
+            output_formats)
+                LANDSCAPE_TEST_OUTPUT_FORMATS="${LANDSCAPE_TEST_OUTPUT_FORMATS:-${value}}"
+                ;;
+            artifact_id)
+                LANDSCAPE_TEST_ARTIFACT_ID="${LANDSCAPE_TEST_ARTIFACT_ID:-${value}}"
+                ;;
+            resolved_version)
+                LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_TEST_LANDSCAPE_VERSION:-${value}}"
+                ;;
+        esac
+    done < "${metadata_path}"
+}
+
+landscape_test_requires_docker() {
+    local include_docker="${LANDSCAPE_TEST_INCLUDE_DOCKER:-}"
+    [[ "${include_docker}" == "true" ]]
 }
 
 # ── Router Harness / Diagnostics ──────────────────────────────────────────────
@@ -462,7 +499,7 @@ landscape_write_test_metadata() {
         image_base="$(basename "$image_path")"
     fi
 
-    LANDSCAPE_TEST_VARIANT="${LANDSCAPE_TEST_VARIANT:-$(landscape_guess_variant_from_image_path "$image_path")}"
+    landscape_load_test_identity "$image_path" || true
     LANDSCAPE_TEST_ARTIFACT_ID="${LANDSCAPE_TEST_ARTIFACT_ID:-${image_base:-unknown-image}}"
     LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_TEST_LANDSCAPE_VERSION:-unknown}"
     LANDSCAPE_TEST_GIT_SHA="${LANDSCAPE_TEST_GIT_SHA:-${GITHUB_SHA:-unknown}}"
@@ -472,7 +509,9 @@ landscape_write_test_metadata() {
 name=${LANDSCAPE_TEST_NAME}
 image_path=${image_path}
 image_basename=${image_base}
-variant=${LANDSCAPE_TEST_VARIANT}
+base_system=${LANDSCAPE_TEST_BASE_SYSTEM:-unknown}
+include_docker=${LANDSCAPE_TEST_INCLUDE_DOCKER:-unknown}
+output_formats=${LANDSCAPE_TEST_OUTPUT_FORMATS:-unknown}
 artifact_id=${LANDSCAPE_TEST_ARTIFACT_ID}
 landscape_version=${LANDSCAPE_TEST_LANDSCAPE_VERSION}
 git_sha=${LANDSCAPE_TEST_GIT_SHA}

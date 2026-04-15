@@ -10,7 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration
-if [ -f "${SCRIPT_DIR}/build.env" ]; then
+if [[ -f "${SCRIPT_DIR}/build.env" ]]; then
+    # shellcheck disable=SC1091
     source "${SCRIPT_DIR}/build.env"
 else
     echo "ERROR: build.env not found in ${SCRIPT_DIR}"
@@ -30,27 +31,138 @@ LANDSCAPE_ADMIN_USER_SOURCE="${LANDSCAPE_ADMIN_USER_SOURCE:-default}"
 LANDSCAPE_ADMIN_PASS="${LANDSCAPE_ADMIN_PASS:-root}"
 LANDSCAPE_ADMIN_PASS_SOURCE="${LANDSCAPE_ADMIN_PASS_SOURCE:-default}"
 
+declare -a CLI_OUTPUT_FORMATS=()
+declare -a OUTPUT_FORMAT_LIST=()
+
+action_usage() {
+    cat <<'EOF'
+Usage:
+  ./build.sh [options]
+
+Options:
+  --base-system debian|alpine
+  --include-docker true|false
+  --output-format img|vmdk|pve-ova   (repeatable)
+  --version VERSION
+  --skip-to PHASE
+EOF
+}
+
+join_by() {
+    local delimiter="$1"
+    shift || true
+    local first=1
+    local value
+    for value in "$@"; do
+        if [[ ${first} -eq 1 ]]; then
+            printf '%s' "${value}"
+            first=0
+        else
+            printf '%s%s' "${delimiter}" "${value}"
+        fi
+    done
+}
+
+validate_base_system() {
+    case "$1" in
+        debian|alpine)
+            ;;
+        *)
+            echo "ERROR: BASE_SYSTEM must be 'debian' or 'alpine', got '$1'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+validate_include_docker() {
+    case "$1" in
+        true|false)
+            ;;
+        *)
+            echo "ERROR: INCLUDE_DOCKER must be 'true' or 'false', got '$1'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+validate_output_format() {
+    case "$1" in
+        img|vmdk|pve-ova)
+            ;;
+        *)
+            echo "ERROR: Unsupported output format '$1'. Use img, vmdk, or pve-ova." >&2
+            exit 1
+            ;;
+    esac
+}
+
+normalize_output_formats() {
+    local -a raw_items=()
+    local -a normalized=()
+    local raw_value trimmed value
+    local seen=","
+
+    if [[ ${#CLI_OUTPUT_FORMATS[@]} -gt 0 ]]; then
+        raw_items=("${CLI_OUTPUT_FORMATS[@]}")
+    else
+        IFS=',' read -r -a raw_items <<< "${OUTPUT_FORMATS}"
+    fi
+
+    for raw_value in "${raw_items[@]}"; do
+        trimmed="${raw_value//[[:space:]]/}"
+        [[ -n "${trimmed}" ]] || continue
+        validate_output_format "${trimmed}"
+        if [[ "${seen}" == *",${trimmed},"* ]]; then
+            continue
+        fi
+        normalized+=("${trimmed}")
+        seen+="${trimmed},"
+    done
+
+    if [[ ${#normalized[@]} -eq 0 ]]; then
+        echo "ERROR: At least one output format is required." >&2
+        exit 1
+    fi
+
+    OUTPUT_FORMAT_LIST=("${normalized[@]}")
+    OUTPUT_FORMATS="$(join_by , "${OUTPUT_FORMAT_LIST[@]}")"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --base)
-            if [[ -n "${2:-}" && ( "$2" == "debian" || "$2" == "alpine" ) ]]; then
+        --base-system)
+            if [[ -n "${2:-}" ]]; then
                 BASE_SYSTEM="$2"
                 shift 2
             else
-                echo "ERROR: --base requires 'debian' or 'alpine'"
+                echo "ERROR: --base-system requires 'debian' or 'alpine'" >&2
                 exit 1
             fi
             ;;
-        --with-docker)
-            INCLUDE_DOCKER="yes"
-            shift
+        --include-docker)
+            if [[ -n "${2:-}" ]]; then
+                INCLUDE_DOCKER="$2"
+                shift 2
+            else
+                echo "ERROR: --include-docker requires 'true' or 'false'" >&2
+                exit 1
+            fi
+            ;;
+        --output-format)
+            if [[ -n "${2:-}" ]]; then
+                CLI_OUTPUT_FORMATS+=("$2")
+                shift 2
+            else
+                echo "ERROR: --output-format requires img, vmdk, or pve-ova" >&2
+                exit 1
+            fi
             ;;
         --version)
             if [[ -n "${2:-}" ]]; then
                 LANDSCAPE_VERSION="$2"
                 shift 2
             else
-                echo "ERROR: --version requires a value (e.g. --version v0.12.4)"
+                echo "ERROR: --version requires a value (e.g. --version v0.12.4)" >&2
                 exit 1
             fi
             ;;
@@ -59,22 +171,30 @@ while [[ $# -gt 0 ]]; do
                 SKIP_TO_PHASE="$2"
                 shift 2
             else
-                echo "ERROR: --skip-to requires a phase number (1-8)"
+                echo "ERROR: --skip-to requires a phase number (1-8)" >&2
                 exit 1
             fi
             ;;
+        --help|-h)
+            action_usage
+            exit 0
+            ;;
         *)
-            echo "Unknown argument: $1"
-            echo "Usage: $0 [--base debian|alpine] [--with-docker] [--version VERSION] [--skip-to PHASE]"
+            echo "Unknown argument: $1" >&2
+            action_usage >&2
             exit 1
             ;;
     esac
 done
 
+validate_base_system "${BASE_SYSTEM}"
+validate_include_docker "${INCLUDE_DOCKER}"
+normalize_output_formats
+
 # ---------------------------------------------------------------------------
 # Must run as root
 # ---------------------------------------------------------------------------
-if [[ $EUID -ne 0 ]]; then
+if [[ ${EUID} -ne 0 ]]; then
     echo "ERROR: This script must be run as root (use sudo)."
     exit 1
 fi
@@ -102,26 +222,37 @@ esac
 # ---------------------------------------------------------------------------
 WORK_DIR="$(pwd)/work"
 OUTPUT_DIR="$(pwd)/output"
+OUTPUT_METADATA_DIR="${OUTPUT_DIR}/metadata"
 ROOTFS_DIR="${WORK_DIR}/rootfs"
 DOWNLOAD_DIR="${WORK_DIR}/downloads/${LANDSCAPE_VERSION}"
 LOOP_DEV=""
 SOURCE_PROBE_TIMEOUT="${SOURCE_PROBE_TIMEOUT:-5}"
 
-# Docker suffix
-IMAGE_SUFFIX=""
-if [[ "${INCLUDE_DOCKER}" == "yes" ]]; then
-    IMAGE_SUFFIX="-docker"
+BUILD_NAME="landscape-mini-x86-${BASE_SYSTEM}"
+if [[ "${INCLUDE_DOCKER}" == "true" ]]; then
+    BUILD_NAME+="-docker"
 fi
 
-# Base system suffix (alpine gets a suffix, debian is the default with no suffix)
-BASE_SUFFIX=""
-if [[ "${BASE_SYSTEM}" == "alpine" ]]; then
-    BASE_SUFFIX="-alpine"
-fi
+IMAGE_FILE="${OUTPUT_DIR}/${BUILD_NAME}.img"
+VMDK_FILE="${OUTPUT_DIR}/${BUILD_NAME}.vmdk"
+PVE_OVA_FILE="${OUTPUT_DIR}/${BUILD_NAME}.ova"
+BUILD_METADATA_FILE="${OUTPUT_METADATA_DIR}/build-metadata.txt"
+RESOLVED_SOURCES_FILE="${OUTPUT_METADATA_DIR}/resolved-sources.env"
 
-IMAGE_FILE="${OUTPUT_DIR}/landscape-mini-x86${BASE_SUFFIX}${IMAGE_SUFFIX}.img"
-RESOLVED_SOURCES_FILE="${OUTPUT_DIR}/metadata/resolved-sources.env"
+output_format_requested() {
+    local requested="$1"
+    local format
+    for format in "${OUTPUT_FORMAT_LIST[@]}"; do
+        if [[ "${format}" == "${requested}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
+# ---------------------------------------------------------------------------
+# Source resolution helpers
+# ---------------------------------------------------------------------------
 resolve_build_sources() {
     echo ""
     echo "==== Source Resolution ===="
@@ -152,7 +283,7 @@ resolve_build_sources() {
         RESOLVED_APT_MIRROR_SOURCE="unused"
     fi
 
-    if [[ "${INCLUDE_DOCKER}" == "yes" && "${BASE_SYSTEM}" == "debian" ]]; then
+    if [[ "${INCLUDE_DOCKER}" == "true" && "${BASE_SYSTEM}" == "debian" ]]; then
         resolve_source \
             "Docker APT mirror" \
             "${DOCKER_APT_MIRROR}" \
@@ -188,7 +319,7 @@ resolve_build_sources() {
     DOCKER_MIRROR_DISPLAY="${RESOLVED_DOCKER_APT_MIRROR:-}"
     DOCKER_GPG_DISPLAY="${RESOLVED_DOCKER_APT_GPG_URL:-}"
 
-    mkdir -p "${OUTPUT_DIR}/metadata"
+    mkdir -p "${OUTPUT_METADATA_DIR}"
     printf '%s\n' \
         "resolved_apt_mirror=${RESOLVED_APT_MIRROR}" \
         "resolved_apt_mirror_source=${RESOLVED_APT_MIRROR_SOURCE}" \
@@ -238,7 +369,7 @@ should_resolve_sources() {
         return 0
     fi
 
-    if [[ "${INCLUDE_DOCKER}" == "yes" && ${SKIP_TO_PHASE} -le 6 ]]; then
+    if [[ "${INCLUDE_DOCKER}" == "true" && ${SKIP_TO_PHASE} -le 6 ]]; then
         return 0
     fi
 
@@ -246,7 +377,7 @@ should_resolve_sources() {
 }
 
 # Determine download base URL
-if [ "${LANDSCAPE_VERSION}" == "latest" ]; then
+if [[ "${LANDSCAPE_VERSION}" == "latest" ]]; then
     DOWNLOAD_BASE="${LANDSCAPE_REPO}/releases/latest/download"
 else
     DOWNLOAD_BASE="${LANDSCAPE_REPO}/releases/download/${LANDSCAPE_VERSION}"
@@ -258,7 +389,6 @@ fi
 trap cleanup EXIT ERR
 
 main() {
-    # Check backend-specific host dependencies
     backend_check_deps
 
     if should_resolve_sources; then
@@ -270,9 +400,12 @@ main() {
     echo "============================================================"
     echo "  Landscape Mini - x86 UEFI Image Builder"
     echo "============================================================"
+    echo "  Build Name        : ${BUILD_NAME}"
     echo "  Base System       : ${BASE_SYSTEM}"
+    echo "  Include Docker    : ${INCLUDE_DOCKER}"
+    echo "  Output Formats    : ${OUTPUT_FORMATS}"
     echo "  Landscape Version : ${LANDSCAPE_VERSION}"
-    echo "  Download Source    : ${DOWNLOAD_BASE}"
+    echo "  Download Source   : ${DOWNLOAD_BASE}"
     if [[ "${BASE_SYSTEM}" == "debian" ]]; then
         echo "  Debian Release    : ${DEBIAN_RELEASE}"
         echo "  APT Mirror        : ${MIRROR} (${RESOLVED_APT_MIRROR_SOURCE})"
@@ -281,14 +414,12 @@ main() {
         echo "  Alpine Mirror     : ${MIRROR} (${RESOLVED_ALPINE_MIRROR_SOURCE})"
     fi
     echo "  Image Size        : ${IMAGE_SIZE_MB} MB"
-    echo "  Include Docker    : ${INCLUDE_DOCKER}"
-    if [[ "${INCLUDE_DOCKER}" == "yes" && "${BASE_SYSTEM}" == "debian" ]]; then
+    if [[ "${INCLUDE_DOCKER}" == "true" && "${BASE_SYSTEM}" == "debian" ]]; then
         echo "  Docker APT Mirror : ${DOCKER_MIRROR_DISPLAY} (${RESOLVED_DOCKER_APT_MIRROR_SOURCE})"
         echo "  Docker GPG URL    : ${DOCKER_GPG_DISPLAY} (${RESOLVED_DOCKER_APT_GPG_URL_SOURCE})"
-    elif [[ "${INCLUDE_DOCKER}" == "yes" && "${BASE_SYSTEM}" == "alpine" ]]; then
+    elif [[ "${INCLUDE_DOCKER}" == "true" && "${BASE_SYSTEM}" == "alpine" ]]; then
         echo "  Docker Source     : Alpine packages via ${MIRROR} (${RESOLVED_ALPINE_MIRROR_SOURCE})"
     fi
-    echo "  Output Format     : ${OUTPUT_FORMAT}"
     echo "  Compress Output   : ${COMPRESS_OUTPUT}"
     echo "  Config Profile    : ${EFFECTIVE_CONFIG_PROFILE}"
     echo "  Topology Source   : ${EFFECTIVE_TOPOLOGY_SOURCE}"
@@ -300,18 +431,15 @@ main() {
         echo "==== Resuming from Phase ${SKIP_TO_PHASE} ===="
         echo "  Phase 1: Download      | Phase 5: Install Landscape"
         echo "  Phase 2: Create Image  | Phase 6: Install Docker"
-        echo "  Phase 3: Bootstrap     | Phase 7: Cleanup & Shrink"
+        echo "  Phase 3: Bootstrap     | Phase 7: Cleanup & Export"
         echo "  Phase 4: Configure     | Phase 8: Report"
     fi
 
-    # Phase 1: Download (always run unless skipping past it)
     [[ ${SKIP_TO_PHASE} -le 1 ]] && phase_download
 
-    # Phase 2: Create image
     if [[ ${SKIP_TO_PHASE} -le 2 ]]; then
         phase_create_image
     elif [[ ${SKIP_TO_PHASE} -le 7 ]]; then
-        # Need to re-attach image for phases 3-7
         resume_from_image
     fi
 
