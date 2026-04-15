@@ -70,6 +70,18 @@
 - `api_username=admin`
 - `api_password=Adm1n!234`
 
+#### 情况 C：顺手选测试
+
+你还可以用 `run_test` 控制这次构建后要不要自动验证：
+
+- 留空 / `none`：只构建
+- `readiness`
+- `readiness,dataplane`
+
+注意：
+
+- `include_docker=true` 时，如果请求了 dataplane，会明确 skip，并在日志里说明原因
+
 #### 其他常见输入
 
 - `landscape_version`
@@ -90,20 +102,31 @@
 
 ---
 
-### 第五步：下载构建结果
+### 第五步：获取最近一次成功构建的下载链接
 
-等 workflow 跑完后：
+workflow 跑完后，你仍然可以下载 Artifacts。
 
-- 打开这次运行记录
-- 在页面下方找到 **Artifacts**
-- 下载对应的构建产物
+但现在更推荐直接使用固定 release 入口：
+
+- Release 页面：`https://github.com/<owner>/landscape-mini/releases/tag/custom-build-latest`
+- 下载直链：`https://github.com/<owner>/landscape-mini/releases/download/custom-build-latest/<asset>`
+
+这个固定 release 始终指向“最近一次成功的 Custom Build”，而不是按 tuple 长久保留的独立下载位：
+
+- 旧 assets 会先删除
+- 再上传最近一次成功构建的新 assets
+- `build-metadata.txt` 和 `effective-landscape_init.toml` 也会一起更新
+
+所以如果你先跑 Debian，后跑 Alpine，后一次 Alpine 成功构建就会覆盖同一个 tag 下原先的 Debian 产物。
 
 你拿到的通常会包含：
 
-- raw 镜像 `.img`
+- raw 镜像 `.img` 或重命名后的稳定产物
 - 构建元信息 `build-metadata.txt`
 - 生效配置 `effective-landscape_init.toml`
 - 如果你请求了额外格式，还会包含 `.vmdk` / `.ova`
+
+如果你需要不可变、按次构建区分的产物，请使用对应 workflow run 的 Artifacts，或记录它的 `run_id` / `artifact_id`。
 
 ---
 
@@ -159,7 +182,7 @@
 - `run_id`
 - `artifact_id`
 
-而不是旧的 `artifact_suffix` 命名。
+也就是说，复测直接对准某次构建产物本身，而不是依赖旧的后缀命名约定。
 
 ---
 
@@ -183,10 +206,12 @@
 
 规则是：
 
-- `include_docker=false` → 跑 dataplane
-- `include_docker=true` → 只跑 readiness
+- `run_test=` 或 `run_test=none` → 不测试
+- `run_test=readiness` → 只跑 readiness
+- `run_test=readiness,dataplane` 且 `include_docker=false` → 跑 readiness + dataplane
+- `run_test=readiness,dataplane` 且 `include_docker=true` → dataplane 明确 skip
 
-这不是按旧 variant 名字判断，而是按能力规则判断。
+这不是按旧 variant 名字判断，而是按统一测试契约和能力规则判断。
 
 ---
 

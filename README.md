@@ -41,6 +41,17 @@ Landscape Router 的最小化 x86 镜像构建器。支持 **Debian Trixie** 和
 
 ### 本地构建
 
+本地配置现在按以下优先级分层加载：
+
+`build.env < build.env.<profile> < build.env.local < 显式环境变量`
+
+推荐做法：
+
+- `build.env`：仓库默认值，保持 tracked
+- `build.env.local`：本机私有覆盖，适合密码、LAN/DHCP、自测开关
+- `build.env.<profile>`：按场景切换 profile，例如 `lab`、`pve`
+- 显式环境变量：临时一次性覆盖，例如 `LANDSCAPE_ADMIN_USER=bar make build`
+
 ```bash
 # 安装构建依赖（首次）
 make deps
@@ -48,15 +59,27 @@ make deps
 # 默认组合：debian + no-docker + img
 make build
 
+# 使用 profile：build.env.lab
+BUILD_ENV_PROFILE=lab make build
+
+# 本机私有覆盖：build.env.local
+make build
+
+# 一次性显式覆盖仍然优先级最高
+LANDSCAPE_ADMIN_USER=admin RUN_TEST=readiness make build
+
 # Alpine raw image
 make build BASE_SYSTEM=alpine
 
 # Debian + Docker + img,pve-ova
 make build INCLUDE_DOCKER=true OUTPUT_FORMATS=img,pve-ova
-
-# Alpine + Docker + img,vmdk,pve-ova
-make build BASE_SYSTEM=alpine INCLUDE_DOCKER=true OUTPUT_FORMATS=img,vmdk,pve-ova
 ```
+
+本地支持的常用自定义项包括：
+
+- `LANDSCAPE_ADMIN_USER` / `LANDSCAPE_ADMIN_PASS`
+- `LANDSCAPE_LAN_SERVER_IP` / `LANDSCAPE_LAN_RANGE_START` / `LANDSCAPE_LAN_RANGE_END` / `LANDSCAPE_LAN_NETMASK`
+- `RUN_TEST`
 
 ### 本地测试
 
@@ -67,6 +90,13 @@ make test
 
 # 数据面测试仅适用于 include_docker=false 的 raw image
 make test-dataplane
+
+# 也可以在构建后自动执行测试
+RUN_TEST=readiness make build
+RUN_TEST=readiness,dataplane make build
+
+# INCLUDE_DOCKER=true 时请求 dataplane 会被明确跳过并记录 skip marker
+INCLUDE_DOCKER=true RUN_TEST=readiness,dataplane make build
 
 # 也可以直接指定任意 raw image
 ./tests/test-readiness.sh output/landscape-mini-x86-alpine.img
@@ -125,13 +155,25 @@ bash <(curl -sL https://raw.githubusercontent.com/bin456789/reinstall/main/reins
 
 ## 构建配置
 
-编辑 `build.env` 或通过环境变量覆盖：
+推荐不要直接修改 tracked 的 `build.env` 作为日常自定义入口，而是优先使用：
+
+- `build.env.local`
+- `build.env.<profile>`
+- 显式环境变量
+- GitHub Actions `Custom Build`
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `BASE_SYSTEM` | `debian` | 基础系统：`debian` / `alpine` |
 | `INCLUDE_DOCKER` | `false` | 是否包含 Docker：`true` / `false` |
 | `OUTPUT_FORMATS` | `img` | 输出格式列表：`img`、`vmdk`、`pve-ova`，逗号分隔 |
+| `RUN_TEST` | _(empty)_ | 本地测试选择：空 / `none`、`readiness`、`readiness,dataplane` |
+| `LANDSCAPE_ADMIN_USER` | `root` | Web 管理用户名 |
+| `LANDSCAPE_ADMIN_PASS` | `root` | Web 管理密码 |
+| `LANDSCAPE_LAN_SERVER_IP` | _(empty)_ | LAN 网关 / DHCP 服务 IP |
+| `LANDSCAPE_LAN_RANGE_START` | _(empty)_ | LAN DHCP 起始地址 |
+| `LANDSCAPE_LAN_RANGE_END` | _(empty)_ | LAN DHCP 结束地址 |
+| `LANDSCAPE_LAN_NETMASK` | _(empty)_ | LAN 子网前缀长度，例如 `24` |
 | `APT_MIRROR` | _(auto probe)_ | Debian 软件源显式覆盖；如果为空则从候选列表自动探测 |
 | `ALPINE_MIRROR` | _(auto probe)_ | Alpine 软件源显式覆盖；如果为空则从候选列表自动探测 |
 | `DOCKER_APT_MIRROR` | _(auto probe)_ | Debian Docker APT 仓库显式覆盖；如果为空则从候选列表自动探测 |
@@ -154,18 +196,37 @@ bash <(curl -sL https://raw.githubusercontent.com/bin456789/reinstall/main/reins
 - `lan_server_ip` / `lan_range_start` / `lan_range_end` / `lan_netmask`
 - `root_password`
 - `api_username` / `api_password`
+- `run_test`
 
 当前优先级：**direct inputs > secrets > defaults**。
+
+测试契约统一为：
+
+- 空 / `none`：仅构建
+- `readiness`
+- `readiness,dataplane`
+
+其中 `include_docker=true` 请求 dataplane 时会明确 skip，并在日志中说明原因。
 
 workflow 会把以下身份信息写入 `build-metadata.txt`：
 
 - `base_system`
 - `include_docker`
 - `output_formats`
+- `run_test`
 - `produced_files`
 - `artifact_id`
+- `release_channel`
 
-网络拓扑的有效配置会随 artifact 一起携带为 `effective-landscape_init.toml`，供 `test.yml` 和 release promotion 校验使用。
+网络拓扑的有效配置会随 artifact 一起携带为 `effective-landscape_init.toml`，供 `test.yml`、固定 release 发布和 release promotion 校验使用。
+
+成功的 Custom Build 还会自动发布到 fork 仓库中的固定 tag：`custom-build-latest`。
+它提供的是“最近一次成功 Custom Build”的固定入口，而不是按 tuple 固定保留的下载位；后续任意成功的 Custom Build（例如 Debian / Alpine、Docker / 非 Docker）都会覆盖这里的内容。
+
+- Release 页面：`https://github.com/<owner>/landscape-mini/releases/tag/custom-build-latest`
+- 下载直链：`https://github.com/<owner>/landscape-mini/releases/download/custom-build-latest/<asset>`
+
+如果你需要不可变的构建产物，请使用对应 workflow run 的 Artifacts，或记录 `run_id` / `artifact_id`。
 
 ## 自动化测试
 
@@ -195,12 +256,13 @@ Router VM (eth0=WAN/SLIRP, eth1=LAN/mcast) ←→ Client VM (CirrOS, eth0=mcast)
 ## CI/CD
 
 - **CI**：手动触发始终可用；对 push 到 `main` / PR，仅在构建相关文件、`.github/` 下相关文件或 `CHANGELOG.md` 变更时自动运行
-- **构建矩阵**：`debian/alpine × include_docker=true/false`
-- **Readiness / E2E 覆盖**：四个组合都跑 readiness；只有 `include_docker=false` 的组合跑 dataplane
+- **构建矩阵**：默认公开面收敛为 `debian × include_docker=true/false`
+- **Readiness / Dataplane 覆盖**：`include_docker=false` 跑 `readiness,dataplane`；`include_docker=true` 跑 `readiness`
 - **Artifact contract**：每个 image artifact 都包含 raw `.img`、`build-metadata.txt`、`effective-landscape_init.toml`，并可按请求附带 `.vmdk` / `.ova`
-- **Custom Build**：`custom-build.yml` 支持 fork 用户按显式组合构建，并支持 LAN/DHCP、Linux 密码、Web 管理账号密码输入
-- **Manual Retest**：`test.yml` 支持按 `run_id` 或 `artifact_id` 复测一整组 CI artifacts，并重新传入 SSH / API 凭据
-- **Release**：推送 `v*` tag 时，`release.yml` 仅 promote 同一 commit 上已通过 CI 的 artifact，校验 tuple metadata 后创建 GitHub Release
+- **Custom Build**：`custom-build.yml` 支持 fork 用户按显式组合构建，并支持 LAN/DHCP、Linux 密码、Web 管理账号密码和 `run_test` 输入
+- **Manual Retest**：`test.yml` 支持按 `run_id` 或 `artifact_id` 复测 Debian 默认公开组合，并重新传入 SSH / API 凭据
+- **Release**：推送 `v*` tag 时，`release.yml` 仅 promote 同一 commit 上已通过 CI 的 Debian artifacts，发布公开默认面：`.img.gz` + `.ova`
+- **Alpine**：不再属于默认公开 release 面，按需通过 `Custom Build` 产出
 
 ## 许可证
 

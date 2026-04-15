@@ -70,6 +70,18 @@ You can additionally enter:
 - `api_username=admin`
 - `api_password=Adm1n!234`
 
+#### Scenario C: You also want to select tests
+
+You can use `run_test` to choose what runs after the image build:
+
+- empty / `none`: build only
+- `readiness`
+- `readiness,dataplane`
+
+Note:
+
+- when `include_docker=true`, requested dataplane is skipped explicitly with a reason in the logs
+
 #### Other common input
 
 - `landscape_version`
@@ -90,20 +102,31 @@ After filling in the options, click:
 
 ---
 
-### Step 5: Download the build output
+### Step 5: Use the latest successful build links
 
-After the workflow finishes:
+After the workflow finishes, you can still download the Artifacts.
 
-- Open that workflow run
-- Scroll down to **Artifacts**
-- Download the artifact you need
+But the recommended path now is the fixed release entry:
+
+- Release page: `https://github.com/<owner>/landscape-mini/releases/tag/custom-build-latest`
+- Direct download base: `https://github.com/<owner>/landscape-mini/releases/download/custom-build-latest/<asset>`
+
+That fixed release always points to the latest successful Custom Build, regardless of tuple:
+
+- old assets are removed first
+- new assets from the latest successful build are uploaded afterward
+- `build-metadata.txt` and `effective-landscape_init.toml` are updated alongside them
+
+So if you run Debian first and Alpine later, the later Alpine run replaces the earlier Debian assets at the same tag.
 
 The output usually includes:
 
-- the raw image `.img`
+- the raw image `.img` or a stable renamed asset
 - build metadata `build-metadata.txt`
 - the resolved configuration `effective-landscape_init.toml`
 - and, if requested, `.vmdk` / `.ova`
+
+If you need immutable per-build outputs, use the Artifacts from that workflow run or record its `run_id` / `artifact_id`.
 
 ---
 
@@ -159,7 +182,7 @@ The retest entry points are now:
 - `run_id`
 - `artifact_id`
 
-rather than the older `artifact_suffix` naming.
+In other words, retests target a concrete build artifact directly rather than depending on older suffix naming conventions.
 
 ---
 
@@ -183,10 +206,12 @@ It is recommended to keep `img` and add `pve-ova` when needed.
 
 The rule is:
 
-- `include_docker=false` → run dataplane
-- `include_docker=true` → readiness only
+- `run_test=` or `run_test=none` → no tests
+- `run_test=readiness` → readiness only
+- `run_test=readiness,dataplane` with `include_docker=false` → readiness + dataplane
+- `run_test=readiness,dataplane` with `include_docker=true` → dataplane is skipped explicitly
 
-That rule is based on capability, not on legacy variant names.
+That is based on the unified test contract and capability rules, not on legacy variant names.
 
 ---
 
