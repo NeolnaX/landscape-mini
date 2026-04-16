@@ -5,67 +5,101 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      target_sha: ${{ steps.meta.outputs.target_sha }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "release_tag=${GITHUB_REF_NAME}"
+            echo "target_sha=${GITHUB_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+  build_debian_no_docker:
+    needs: prepare
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/_build-and-validate.yml
+    with:
+      base_system: debian
+      include_docker: 'false'
+      output_formats: img,pve-ova
+      run_test: readiness,dataplane
+      release_channel: public-release
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
+      repository_owner: ${{ github.repository_owner }}
+
+  build_debian_docker:
+    needs: prepare
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/_build-and-validate.yml
+    with:
+      base_system: debian
+      include_docker: 'true'
+      output_formats: img,pve-ova
+      run_test: readiness
+      release_channel: public-release
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
+      repository_owner: ${{ github.repository_owner }}
+
   release:
+    needs:
+      - prepare
+      - build_debian_no_docker
+      - build_debian_docker
     runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Resolve promotion source
-        id: source
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_tag="${GITHUB_REF_NAME}"
-          target_sha="${GITHUB_SHA}"
-          run_id="$(gh api --paginate \
-            "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&head_sha=${target_sha}&per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "success") | .id' | head -n 1)"
-          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
-            echo "No successful ci.yml push run found on main for tag ${release_tag} at ${target_sha}" >&2
-            exit 1
-          fi
-          {
-            echo "release_tag=$release_tag"
-            echo "target_sha=$target_sha"
-            echo "source_run_id=$run_id"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Download CI image artifacts
+      - name: Download Debian no-Docker artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: landscape-mini-x86-*
-          path: artifacts/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.source.outputs.source_run_id }}
-          merge-multiple: false
+          name: ${{ needs.build_debian_no_docker.outputs.image_artifact }}
+          path: artifacts/debian-no-docker/
 
-      - name: Validate promoted artifacts
+      - name: Download Debian Docker artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build_debian_docker.outputs.image_artifact }}
+          path: artifacts/debian-docker/
+
+      - name: Validate release artifacts
         shell: bash
+        env:
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
         run: |
           set -euo pipefail
           shopt -s nullglob
-          source build.env
-          expected_version="$LANDSCAPE_VERSION"
-          expected_tuples=(
-            "debian:false"
-            "debian:true"
-          )
-          found=0
-          seen_tuples=","
 
-          for dir in artifacts/*; do
-            [ -d "$dir" ] || continue
+          expected_dirs=(
+            "artifacts/debian-no-docker:false"
+            "artifacts/debian-docker:true"
+          )
+
+          found=0
+          for spec in "${expected_dirs[@]}"; do
+            dir="${spec%%:*}"
+            expected_include_docker="${spec##*:}"
             metadata="$dir/metadata/build-metadata.txt"
             config="$dir/metadata/effective-landscape_init.toml"
             image=("$dir"/*.img)
             ova=("$dir"/*.ova)
+
             if [ ! -f "$metadata" ]; then
               echo "Missing build metadata in $dir" >&2
               exit 1
@@ -88,58 +122,47 @@ jobs:
             include_docker="$(awk -F'=' '/^include_docker=/{print $2; exit}' "$metadata")"
             output_formats="$(awk -F'=' '/^output_formats=/{print $2; exit}' "$metadata")"
             produced_files="$(awk -F'=' '/^produced_files=/{print $2; exit}' "$metadata")"
-            artifact_id="$(awk -F'=' '/^artifact_id=/{print $2; exit}' "$metadata")"
-            resolved_version="$(awk -F'=' '/^resolved_version=/{print $2; exit}' "$metadata")"
-            tuple="${base_system}:${include_docker}"
+            release_channel="$(awk -F'=' '/^release_channel=/{print $2; exit}' "$metadata")"
+            release_tag="$(awk -F'=' '/^release_tag=/{print $2; exit}' "$metadata")"
 
-            if [ "$git_sha" != "${{ steps.source.outputs.target_sha }}" ]; then
-              echo "Artifact $artifact_id has git_sha=$git_sha, expected ${{ steps.source.outputs.target_sha }}" >&2
+            if [ "$git_sha" != "$TARGET_SHA" ]; then
+              echo "Artifact in $dir has git_sha=$git_sha, expected $TARGET_SHA" >&2
               exit 1
             fi
-            if [ -z "$base_system" ] || [ -z "$include_docker" ] || [ -z "$artifact_id" ] || [ -z "$resolved_version" ]; then
-              echo "Incomplete metadata in $metadata" >&2
+            if [ "$base_system" != "debian" ]; then
+              echo "Artifact in $dir has base_system=$base_system, expected debian" >&2
               exit 1
             fi
-            if [ "$resolved_version" != "$expected_version" ]; then
-              echo "Artifact $artifact_id resolved_version=$resolved_version, expected $expected_version" >&2
+            if [ "$include_docker" != "$expected_include_docker" ]; then
+              echo "Artifact in $dir has include_docker=$include_docker, expected $expected_include_docker" >&2
               exit 1
             fi
             if [ "$output_formats" != "img,pve-ova" ]; then
-              echo "Artifact $artifact_id output_formats=$output_formats, expected img,pve-ova" >&2
+              echo "Artifact in $dir has output_formats=$output_formats, expected img,pve-ova" >&2
+              exit 1
+            fi
+            if [ "$release_channel" != "public-release" ]; then
+              echo "Artifact in $dir has release_channel=$release_channel, expected public-release" >&2
+              exit 1
+            fi
+            if [ "$release_tag" != "${{ needs.prepare.outputs.release_tag }}" ]; then
+              echo "Artifact in $dir has release_tag=$release_tag, expected ${{ needs.prepare.outputs.release_tag }}" >&2
               exit 1
             fi
             if [[ "$produced_files" != *.img* || "$produced_files" != *.ova* ]]; then
-              echo "Artifact $artifact_id produced_files=$produced_files, expected img and ova outputs" >&2
+              echo "Artifact in $dir produced_files=$produced_files, expected img and ova outputs" >&2
               exit 1
             fi
 
             found=$((found + 1))
-            seen_tuples+="${tuple},"
           done
 
           if [ "$found" -ne 2 ]; then
-            echo "Expected 2 promoted artifacts, found $found" >&2
+            echo "Expected 2 release artifacts, found $found" >&2
             exit 1
           fi
 
-          for tuple in "${expected_tuples[@]}"; do
-            if [[ "$seen_tuples" != *",${tuple},"* ]]; then
-              echo "Missing promoted artifact for tuple ${tuple}" >&2
-              exit 1
-            fi
-          done
-
-      - name: Download validation logs
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          pattern: test-logs-*
-          path: release-logs/
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.source.outputs.source_run_id }}
-          merge-multiple: false
-
-      - name: Compress images
+      - name: Compress raw images
         shell: bash
         run: |
           set -euo pipefail
@@ -147,19 +170,17 @@ jobs:
           for f in artifacts/*/*.img; do
             gzip -k "$f"
           done
-          find artifacts -maxdepth 4 -type f | sort
 
       - name: Write release summary
         shell: bash
         run: |
           set -euo pipefail
           {
-            echo "## Release promotion"
-            echo "- Tag: ${{ steps.source.outputs.release_tag }}"
-            echo "- Source CI run: ${{ steps.source.outputs.source_run_id }}"
-            echo "- Source commit: ${{ steps.source.outputs.target_sha }}"
-            echo "- Validation: promoted existing CI artifacts only; no rebuild performed"
-            echo "- Required tuple coverage: debian × include_docker true/false"
+            echo "## Release rebuild"
+            echo "- Tag: ${{ needs.prepare.outputs.release_tag }}"
+            echo "- Source commit: ${{ needs.prepare.outputs.target_sha }}"
+            echo "- Build mode: rebuild on tag push (no CI artifact promotion)"
+            echo "- Tuple coverage: debian × include_docker true/false"
             echo "- Published files: .img.gz + .ova"
           } >> "$GITHUB_STEP_SUMMARY"
 

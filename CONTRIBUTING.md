@@ -92,7 +92,7 @@ chore: release v0.2.3
 
 本仓库当前的正确发版顺序：
 
-**main 可发布 → 整理 changelog → 创建 release commit → push main → 等对应 CI 成功 → 打 tag → push tag → 执行 release promotion**
+**main 可发布 → 整理 changelog → 创建 release commit → push main → 打 tag → push tag → 执行 release rebuild**
 
 示例：
 
@@ -106,25 +106,31 @@ git add CHANGELOG.md
 git commit -m "chore: release v0.2.3"
 git push origin main
 
-# 等 main 上该 commit 的 ci.yml 成功
 git tag v0.2.3
 git push origin v0.2.3
 ```
 
-`release.yml` 现在只会：
-- 查找该 tag 所指向 commit 在 `main` 上对应的成功 `ci.yml` 运行记录
-- 下载那次 CI 已验证的 2 个 Debian tuple artifacts
-- 校验 metadata / git SHA / tuple 完整性
-- 压缩 `.img` 并创建 GitHub Release
+`release.yml` 现在会：
+- 在 tag 对应 commit 上重新构建 2 个 Debian tuple artifacts
+- tuple 覆盖为 `debian + include_docker=false` 与 `debian + include_docker=true`
+- 请求发布所需输出：`img,pve-ova`
+- 校验 metadata / effective topology config / tuple 完整性
+- 压缩 raw `.img` 并创建 GitHub Release
 
-它**不会**在 tag 触发时重新构建镜像。
+它**不再**依赖 `main` 上已有成功 `ci.yml` 的 artifacts。
+
+自动 `ci.yml` 现在只承担快速验证：
+- 仅验证 `debian + include_docker=false`
+- 仅请求 raw `img`
+- 运行 `readiness,dataplane`
 
 不要这样做：
 
+- 继续把 release 理解成“promote CI artifacts”
+- 期待 tag 发布依赖 main 上已有成功 CI run 才能工作
 - 先打 tag，再补 release commit
 - 先 push tag，再改 `CHANGELOG.md`
 - 把上游 Landscape 版本当作本仓库 release 版本
-- 期待 release workflow 在没有对应成功 CI run 时自动重建
 
 ## 版本号说明
 

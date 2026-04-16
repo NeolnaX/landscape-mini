@@ -11,8 +11,9 @@ This file currently tracks unreleased work and recent notable changes.
 
 ### Changed / 变更
 
+- Rework automatic CI into a faster validation-only surface that checks only the Debian non-Docker raw `img` path, leaving wider output/export combinations to manual or release workflows / 将自动 CI 收缩为更快的验证面，仅校验 Debian 非 Docker 的 raw `img` 路径，把更宽的输出/导出组合留给手动或 release 工作流
+- Rebuild Debian Docker / non-Docker release artifacts directly on tag pushes instead of promoting CI artifacts from main, while continuing to publish `.img.gz` + `.ova` release assets / 改为在 tag 推送时直接重建 Debian Docker / 非 Docker 发布产物，而不是从 main 上 promote CI artifacts，同时继续发布 `.img.gz` + `.ova` release 资产
 - Rework CI around a reusable single-variant build-and-validate workflow, ship effective topology config inside artifacts, and let tests consume artifact-carried config plus injected credentials / 将 CI 重构为可复用的单变体构建验证流程，把 effective topology 配置随 artifact 一起发布，并让测试使用 artifact 自带配置与注入凭据
-- Promote GitHub releases from already-validated CI artifacts instead of rebuilding on tag pushes / 将 GitHub Release 改为直接基于已验证的 CI artifact 晋级生成，不再在 tag 推送时重新构建
 - Replace the legacy variant model with an explicit build identity model based on `base_system`, `include_docker`, and `output_formats`, update local build UX, rework tests to consume metadata, and fold `pve-ova` into the normal exporter pipeline / 用 `base_system`、`include_docker`、`output_formats` 替换旧的 variant 模型，更新本地构建体验，让测试改为消费 metadata，并将 `pve-ova` 纳入常规导出流水线
 - Rewrite CI, Custom Build, retest, release promotion, and repository docs around tuple-based build identities instead of named variants / 将 CI、Custom Build、复测、release promotion 与仓库文档统一重写为基于 tuple 的构建身份模型，不再围绕命名 variant 运转
 

@@ -218,7 +218,7 @@ The workflow writes the following build identity fields into `build-metadata.txt
 - `artifact_id`
 - `release_channel`
 
-The effective network topology is bundled as `effective-landscape_init.toml` so `test.yml`, fixed-release publishing, and release promotion can validate it.
+The effective network topology is bundled as `effective-landscape_init.toml` so `test.yml`, fixed-release publishing, and tag release rebuild validation can use it.
 
 Successful Custom Build runs also publish to a fixed tag in the fork: `custom-build-latest`.
 It is a fixed entry point for the latest successful Custom Build, not a tuple-specific permanent download slot; any later successful Custom Build (for example Debian / Alpine, Docker / non-Docker) replaces its contents.
@@ -256,12 +256,12 @@ Coverage includes DHCP lease assignment, lease visibility in the Router API, and
 ## CI/CD
 
 - **CI**: Manual runs are always available. On pushes to `main` and pull requests, workflows run automatically only when build-related files, relevant files under `.github/`, or `CHANGELOG.md` change.
-- **Build matrix**: the default public surface is now `debian × include_docker=true/false`.
-- **Readiness / dataplane coverage**: `include_docker=false` runs `readiness,dataplane`; `include_docker=true` runs `readiness`.
-- **Artifact contract**: every image artifact includes raw `.img`, `build-metadata.txt`, and `effective-landscape_init.toml`, and may also include `.vmdk` / `.ova`.
+- **Automatic CI validation surface**: only `debian + include_docker=false`, requesting raw `img` only.
+- **Readiness / dataplane coverage**: automatic CI runs `readiness,dataplane` for `include_docker=false`.
+- **Artifact contract**: every image artifact includes raw `.img`, `build-metadata.txt`, and `effective-landscape_init.toml`; automatic CI no longer exports `.vmdk` / `.ova`.
 - **Custom Build**: `custom-build.yml` lets fork users build explicit tuples with custom LAN/DHCP settings, Linux password, Web UI credentials, and `run_test` selection.
 - **Manual Retest**: `test.yml` retests the Debian default public tuples by `run_id` or `artifact_id`, with SSH / API credentials passed in again.
-- **Release**: when a `v*` tag is pushed, `release.yml` promotes only already-passed Debian CI artifacts from the same commit and publishes the default public surface: `.img.gz` + `.ova`.
+- **Release**: when a `v*` tag is pushed, `release.yml` rebuilds Debian Docker / non-Docker artifacts from that tagged commit instead of promoting CI artifacts, and publishes the default public surface: `.img.gz` + `.ova`.
 - **Alpine**: Alpine is no longer part of the default public release surface; use `Custom Build` when you need it.
 
 ## License

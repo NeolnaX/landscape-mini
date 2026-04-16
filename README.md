@@ -218,7 +218,7 @@ workflow 会把以下身份信息写入 `build-metadata.txt`：
 - `artifact_id`
 - `release_channel`
 
-网络拓扑的有效配置会随 artifact 一起携带为 `effective-landscape_init.toml`，供 `test.yml`、固定 release 发布和 release promotion 校验使用。
+网络拓扑的有效配置会随 artifact 一起携带为 `effective-landscape_init.toml`，供 `test.yml`、固定 release 发布和 tag release rebuild 校验使用。
 
 成功的 Custom Build 还会自动发布到 fork 仓库中的固定 tag：`custom-build-latest`。
 它提供的是“最近一次成功 Custom Build”的固定入口，而不是按 tuple 固定保留的下载位；后续任意成功的 Custom Build（例如 Debian / Alpine、Docker / 非 Docker）都会覆盖这里的内容。
@@ -256,12 +256,12 @@ Router VM (eth0=WAN/SLIRP, eth1=LAN/mcast) ←→ Client VM (CirrOS, eth0=mcast)
 ## CI/CD
 
 - **CI**：手动触发始终可用；对 push 到 `main` / PR，仅在构建相关文件、`.github/` 下相关文件或 `CHANGELOG.md` 变更时自动运行
-- **构建矩阵**：默认公开面收敛为 `debian × include_docker=true/false`
-- **Readiness / Dataplane 覆盖**：`include_docker=false` 跑 `readiness,dataplane`；`include_docker=true` 跑 `readiness`
-- **Artifact contract**：每个 image artifact 都包含 raw `.img`、`build-metadata.txt`、`effective-landscape_init.toml`，并可按请求附带 `.vmdk` / `.ova`
+- **自动 CI 验证面**：仅验证 `debian + include_docker=false`，并只请求 raw `img`
+- **Readiness / Dataplane 覆盖**：自动 CI 对 `include_docker=false` 跑 `readiness,dataplane`
+- **Artifact contract**：每个 image artifact 都包含 raw `.img`、`build-metadata.txt`、`effective-landscape_init.toml`；自动 CI 不再承担 `.vmdk` / `.ova` 导出
 - **Custom Build**：`custom-build.yml` 支持 fork 用户按显式组合构建，并支持 LAN/DHCP、Linux 密码、Web 管理账号密码和 `run_test` 输入
 - **Manual Retest**：`test.yml` 支持按 `run_id` 或 `artifact_id` 复测 Debian 默认公开组合，并重新传入 SSH / API 凭据
-- **Release**：推送 `v*` tag 时，`release.yml` 仅 promote 同一 commit 上已通过 CI 的 Debian artifacts，发布公开默认面：`.img.gz` + `.ova`
+- **Release**：推送 `v*` tag 时，`release.yml` 会在 tag 对应 commit 上重新构建 Debian 的 Docker / 非 Docker 产物，而不是 promote CI artifacts；发布公开默认面：`.img.gz` + `.ova`
 - **Alpine**：不再属于默认公开 release 面，按需通过 `Custom Build` 产出
 
 ## 许可证

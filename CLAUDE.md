@@ -79,12 +79,11 @@ make ssh
 
 ### CI
 
-`ci.yml` builds 4 tuples:
+`ci.yml` now validates only 1 automatic tuple:
 
 - `debian + false`
-- `debian + true`
-- `alpine + false`
-- `alpine + true`
+
+Automatic CI requests only `img` output and runs `readiness,dataplane`.
 
 ### Custom Build
 
@@ -116,7 +115,8 @@ Secrets names:
 
 ### Release
 
-`release.yml` does promotion, not rebuild.
+`release.yml` rebuilds Debian release artifacts on tag pushes instead of promoting CI artifacts.
+It rebuilds both Debian tuples (`include_docker=true/false`) with `img,pve-ova`, validates metadata/config, then publishes `.img.gz` + `.ova`.
 
 ## Key files
 
