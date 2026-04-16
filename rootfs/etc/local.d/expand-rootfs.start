@@ -1,0 +1,2 @@
+#!/bin/sh
+/usr/local/bin/expand-rootfs.sh >> /var/log/expand-rootfs.log 2>&1

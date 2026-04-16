@@ -311,17 +311,18 @@ backend_install_landscape_services() {
         "${ROOTFS_DIR}/etc/init.d/landscape-router"
     chmod +x "${ROOTFS_DIR}/etc/init.d/landscape-router"
 
-    # Install expand-rootfs OpenRC init script
-    echo "  Installing expand-rootfs OpenRC service ..."
-    cp "${SCRIPT_DIR}/rootfs/etc/init.d/expand-rootfs" \
-        "${ROOTFS_DIR}/etc/init.d/expand-rootfs"
-    chmod +x "${ROOTFS_DIR}/etc/init.d/expand-rootfs"
+    # Install local.d hook for expand-rootfs
+    echo "  Installing expand-rootfs local.d hook ..."
+    mkdir -p "${ROOTFS_DIR}/etc/local.d"
+    cp "${SCRIPT_DIR}/rootfs/etc/local.d/expand-rootfs.start" \
+        "${ROOTFS_DIR}/etc/local.d/expand-rootfs.start"
+    chmod +x "${ROOTFS_DIR}/etc/local.d/expand-rootfs.start"
 
     # Enable services
     echo "  Enabling landscape-router service ..."
     run_in_chroot "rc-update add landscape-router default"
-    echo "  Enabling expand-rootfs service ..."
-    run_in_chroot "rc-update add expand-rootfs default"
+    echo "  Enabling local service ..."
+    run_in_chroot "rc-update add local default"
 }
 
 # =============================================================================

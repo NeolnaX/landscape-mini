@@ -7,6 +7,7 @@ This file currently tracks unreleased work and recent notable changes.
 
 ### Fixed / 修复
 
+- Run Alpine `expand-rootfs` from an OpenRC `local.d` hook instead of a regular service so first-boot root partition auto-expansion happens more reliably on slower virtualized environments like PVE / 将 Alpine 的 `expand-rootfs` 改为通过 OpenRC `local.d` 钩子运行，而不是普通服务，以提升其在 PVE 等较慢虚拟化环境下首次启动自动扩容的成功率
 - Run Alpine `expand-rootfs` in the later OpenRC `default` runlevel so first-boot root partition auto-expansion happens reliably after the kernel recognizes the resized partition / 将 Alpine 的 `expand-rootfs` 改为在更晚的 OpenRC `default` runlevel 运行，使首次启动时根分区自动扩容可在内核识别新分区大小后稳定完成
 - Stop reusable GitHub workflow builds from gzip-compressing raw `.img` outputs by default, while keeping compression available as an explicit workflow input when needed / 让可复用 GitHub workflow 构建默认不再额外 gzip 压缩 raw `.img` 产物，同时保留按需显式开启压缩的能力
 - Ensure Custom Build fixed releases always publish a compressed `.img.gz` when the latest successful build only produced a raw `.img`, so fork users keep getting the expected compressed installer asset / 确保 Custom Build 固定 release 在最新成功构建只产出 raw `.img` 时也会自动补发 `.img.gz`，让 fork 用户默认仍能拿到预期的压缩安装镜像
