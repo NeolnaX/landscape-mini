@@ -5,6 +5,8 @@ This file currently tracks unreleased work and recent notable changes.
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-04-17
+
 ### Fixed / 修复
 
 - Keep full wired NIC driver coverage during image trimming, ship PCI/NIC diagnostics tools, and install full firmware packages so Intel X520-DA2 passthrough and broader physical NIC compatibility work on both Debian and Alpine / 在镜像裁剪阶段保留完整有线网卡驱动覆盖，预装 PCI/NIC 诊断工具，并安装完整固件包，使 Debian 与 Alpine 上的 Intel X520-DA2 直通及更广泛实体网卡兼容性恢复正常
@@ -162,7 +164,8 @@ This file currently tracks unreleased work and recent notable changes.
 - Add concurrency group to prevent duplicate CI runs / 添加并发组以防止 CI 重复运行 (`ee11fe2`)
 - Add contents write permission for release job / 为发布任务添加内容写入权限 (`97b6240`)
 
-[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.8...HEAD
+[Unreleased]: https://github.com/Cloud370/landscape-mini/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/Cloud370/landscape-mini/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/Cloud370/landscape-mini/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/Cloud370/landscape-mini/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/Cloud370/landscape-mini/compare/v0.2.5...v0.2.6
