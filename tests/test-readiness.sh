@@ -22,6 +22,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/common.sh"
+source "${SCRIPT_DIR}/local-runtime.sh"
 
 IMAGE_PATH="${1:-${PROJECT_DIR}/output/landscape-mini-x86-debian.img}"
 SSH_PORT="${SSH_PORT:-2222}"
@@ -74,6 +75,7 @@ docker_functional_check() {
 }
 
 preflight() {
+    landscape_prepare_test_environment
     info "Preflight checks..."
 
     ensure_image_exists "${IMAGE_PATH}" || {

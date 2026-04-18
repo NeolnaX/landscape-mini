@@ -104,6 +104,79 @@ INCLUDE_DOCKER=true RUN_TEST=readiness,dataplane make build
 make test-serial
 ```
 
+By default, `make test` and `make test-dataplane` now auto-handle the local runtime resources needed for parallel runs:
+
+- if `SSH_PORT` / `WEB_PORT` are not provided, the test auto-picks free ports
+- `make test-dataplane` also auto-picks a free `MCAST_PORT` when not provided
+- if the default `output/test-logs` or dataplane cache path is not writable (for example because local build artifacts were created by root), the test automatically falls back to writable temporary directories under `/tmp`
+- if you want fixed resources, you can still pass `SSH_PORT`, `WEB_PORT`, `MCAST_PORT`, and MAC values explicitly
+
+Examples:
+
+```bash
+# Default local entrypoints; safe to start multiple in parallel
+make test
+make test-dataplane
+
+# Parallel checks against separate build trees
+make test OUTPUT_DIR=output/p1 WORK_DIR=work/p1 &
+make test OUTPUT_DIR=output/p2 WORK_DIR=work/p2 &
+wait
+
+# Still possible to pin ports / multicast explicitly
+make test SSH_PORT=2229 WEB_PORT=9809
+make test-dataplane SSH_PORT=2230 WEB_PORT=9810 MCAST_PORT=1240
+```
+
+Treat `make test` / `make test-dataplane` as the default local entrypoints. Only call the scripts directly when you deliberately want to target a specific raw image or reuse a fixed port set.
+
+```bash
+ssh -o StrictHostKeyChecking=no -p 2222 root@localhost
+```
+This only applies when you intentionally keep fixed ports, or when using `make test-serial` / `make test-gui`. Auto-allocated tests print the actual assigned ports in their logs.
+
+> `make test-serial` and `make test-gui` still use fixed ports and fixed network settings for interactive debugging. Auto-allocation only applies to `make test`, `make test-dataplane`, and the corresponding scripts.
+
+> Dataplane scheduling still follows `include_docker=false`, not the legacy variant naming.
+
+> The auto-allocation implementation lives in `tests/local-runtime.sh`.
+
+> If you explicitly pass ports / multicast / MAC values, the tests respect them and do not rewrite them.
+
+> To disable auto-allocation completely, pass `LANDSCAPE_TEST_AUTO_ALLOCATE=0`.
+
+Examples:
+
+```bash
+LANDSCAPE_TEST_AUTO_ALLOCATE=0 make test SSH_PORT=2222 WEB_PORT=9800
+LANDSCAPE_TEST_AUTO_ALLOCATE=0 make test-dataplane SSH_PORT=2224 WEB_PORT=9802 MCAST_PORT=1234
+```
+
+If auto-allocation is disabled, you are responsible for avoiding conflicts in ports, log directories, and dataplane network resources.
+
+> Typical local usage: just run `make test` / `make test-dataplane`; only pin resources explicitly when you need stable ports for packet capture or external integration.
+
+```bash
+# Show the current local defaults/help
+make help
+```
+
+When help shows `test SSH port=auto`, `test Web port=auto`, or `dataplane mcast=auto:auto`, it means those resources will be auto-assigned during local test runs. `serial SSH` / `serial Web` are the fixed ports used by `make test-serial` / `make test-gui`.
+
+If you pass explicit values, help reflects them:
+
+```bash
+make help SSH_PORT=2229 WEB_PORT=9809 MCAST_PORT=1240
+```
+
+That is useful when you need stable ports for debugging.
+
+```bash
+# Dataplane also accepts fixed MAC addresses
+make test-dataplane ROUTER_WAN_MAC=52:54:00:12:34:44 ROUTER_LAN_MAC=52:54:00:12:35:44 CLIENT_MAC=52:54:00:12:36:44
+```
+
+In normal use you do not need to set MACs manually; only do so when reproducing a specific network setup or integrating with external tooling.
 ## Deployment
 
 ### Physical Machine / USB Drive

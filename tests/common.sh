@@ -32,8 +32,22 @@ LANDSCAPE_TEST_HTTP_TIMEOUT="${LANDSCAPE_TEST_HTTP_TIMEOUT:-10}"
 LANDSCAPE_API_READY_TIMEOUT="${LANDSCAPE_API_READY_TIMEOUT:-45}"
 LANDSCAPE_API_READY_INTERVAL="${LANDSCAPE_API_READY_INTERVAL:-3}"
 LANDSCAPE_ROUTER_READY_TIMEOUT="${LANDSCAPE_ROUTER_READY_TIMEOUT:-90}"
-LANDSCAPE_TEST_LOG_DIR="${LANDSCAPE_TEST_LOG_DIR:-${PROJECT_DIR:-$(pwd)}/output/test-logs}"
-LANDSCAPE_EFFECTIVE_INIT_CONFIG="${LANDSCAPE_EFFECTIVE_INIT_CONFIG:-${PROJECT_DIR:-$(pwd)}/output/metadata/effective-landscape_init.toml}"
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_DIR:-$(pwd)}/output}"
+WORK_DIR="${WORK_DIR:-${PROJECT_DIR:-$(pwd)}/work}"
+LANDSCAPE_TEST_LOG_DIR="${LANDSCAPE_TEST_LOG_DIR:-${OUTPUT_DIR}/test-logs}"
+LANDSCAPE_EFFECTIVE_INIT_CONFIG="${LANDSCAPE_EFFECTIVE_INIT_CONFIG:-${OUTPUT_DIR}/metadata/effective-landscape_init.toml}"
+LANDSCAPE_TEST_AUTO_ALLOCATED=0
+LANDSCAPE_TEST_OWN_LOG_DIR=0
+LANDSCAPE_TEST_TMP_LOG_DIR="${LANDSCAPE_TEST_TMP_LOG_DIR:-}"
+LANDSCAPE_TEST_TMP_WORK_DIR="${LANDSCAPE_TEST_TMP_WORK_DIR:-}"
+LANDSCAPE_TEST_ALLOCATED_ID="${LANDSCAPE_TEST_ALLOCATED_ID:-}"
+LANDSCAPE_TEST_AUTO_ALLOCATE="${LANDSCAPE_TEST_AUTO_ALLOCATE:-1}"
+LANDSCAPE_TEST_RESOURCE_LOCK="${LANDSCAPE_TEST_RESOURCE_LOCK:-/tmp/landscape-mini-test-resources.lock}"
+LANDSCAPE_TEST_TMP_ROOT="${LANDSCAPE_TEST_TMP_ROOT:-/tmp}"
+CIRROS_CACHE_DIR="${CIRROS_CACHE_DIR:-${WORK_DIR}/downloads/cirros}"
+
+export CIRROS_CACHE_DIR LANDSCAPE_TEST_AUTO_ALLOCATE LANDSCAPE_TEST_RESOURCE_LOCK LANDSCAPE_TEST_TMP_ROOT
+export LANDSCAPE_TEST_TMP_LOG_DIR LANDSCAPE_TEST_TMP_WORK_DIR LANDSCAPE_TEST_ALLOCATED_ID
 
 if [[ -z "${LANDSCAPE_INIT_CONFIG:-}" ]]; then
     if [[ -f "${LANDSCAPE_EFFECTIVE_INIT_CONFIG}" ]]; then
@@ -495,17 +509,36 @@ landscape_expand_raw_image() {
 }
 
 
+landscape_test_artifact_suffix() {
+    local suffix=""
+
+    if [[ "${SSH_PORT:-2222}" != "2222" ]]; then
+        suffix+="-ssh${SSH_PORT}"
+    fi
+    if [[ "${WEB_PORT:-9800}" != "9800" ]]; then
+        suffix+="-web${WEB_PORT}"
+    fi
+    if [[ -n "${MCAST_PORT:-}" && "${MCAST_PORT}" != "1234" ]]; then
+        suffix+="-mcast${MCAST_PORT}"
+    fi
+
+    printf '%s' "${suffix}"
+}
+
 landscape_router_init_paths() {
     local prefix="$1"
+    local suffix=""
 
     mkdir -p "${LANDSCAPE_TEST_LOG_DIR}"
 
-    LANDSCAPE_ROUTER_SERIAL_LOG="${LANDSCAPE_TEST_LOG_DIR}/${prefix}-serial-router.log"
-    LANDSCAPE_RESULTS_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}-results.txt"
-    LANDSCAPE_READINESS_SNAPSHOT_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}-readiness.txt"
-    LANDSCAPE_SERVICE_SNAPSHOT_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}-services.json"
-    LANDSCAPE_ROUTER_DIAGNOSTICS_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}-diagnostics.txt"
-    LANDSCAPE_TEST_METADATA_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}-metadata.txt"
+    suffix="$(landscape_test_artifact_suffix)"
+
+    LANDSCAPE_ROUTER_SERIAL_LOG="${LANDSCAPE_TEST_LOG_DIR}/${prefix}${suffix}-serial-router.log"
+    LANDSCAPE_RESULTS_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}${suffix}-results.txt"
+    LANDSCAPE_READINESS_SNAPSHOT_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}${suffix}-readiness.txt"
+    LANDSCAPE_SERVICE_SNAPSHOT_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}${suffix}-services.json"
+    LANDSCAPE_ROUTER_DIAGNOSTICS_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}${suffix}-diagnostics.txt"
+    LANDSCAPE_TEST_METADATA_FILE="${LANDSCAPE_TEST_LOG_DIR}/${prefix}${suffix}-metadata.txt"
 
     rm -f \
         "${LANDSCAPE_ROUTER_SERIAL_LOG}" \

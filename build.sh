@@ -304,6 +304,8 @@ run_local_post_build_tests() {
         return 0
     fi
 
+    export WORK_DIR="${WORK_DIR}"
+    export OUTPUT_DIR="${OUTPUT_DIR}"
     export LANDSCAPE_TEST_BASE_SYSTEM="${BASE_SYSTEM}"
     export LANDSCAPE_TEST_INCLUDE_DOCKER="${INCLUDE_DOCKER}"
     export LANDSCAPE_TEST_OUTPUT_FORMATS="${OUTPUT_FORMATS}"
@@ -427,8 +429,8 @@ esac
 # ---------------------------------------------------------------------------
 # Variables
 # ---------------------------------------------------------------------------
-WORK_DIR="$(pwd)/work"
-OUTPUT_DIR="$(pwd)/output"
+WORK_DIR="${WORK_DIR:-$(pwd)/work}"
+OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/output}"
 OUTPUT_METADATA_DIR="${OUTPUT_DIR}/metadata"
 ROOTFS_DIR="${WORK_DIR}/rootfs"
 DOWNLOAD_DIR="${WORK_DIR}/downloads/${LANDSCAPE_VERSION}"

@@ -24,6 +24,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/common.sh"
+source "${SCRIPT_DIR}/local-runtime.sh"
 
 IMAGE_PATH="${1:-${PROJECT_DIR}/output/landscape-mini-x86-debian.img}"
 SSH_PORT="${SSH_PORT:-2222}"
@@ -46,11 +47,11 @@ CIRROS_CHECKSUM_MD5="c8fc807773e5354afe61636071771906"
 CIRROS_USER="cirros"
 CIRROS_PASSWORD="gocubsgo"
 
-MCAST_ADDR="230.0.0.1"
-MCAST_PORT="1234"
-ROUTER_WAN_MAC="52:54:00:12:34:01"
-ROUTER_LAN_MAC="52:54:00:12:34:02"
-CLIENT_MAC="52:54:00:12:34:10"
+MCAST_ADDR="${MCAST_ADDR:-230.0.0.1}"
+MCAST_PORT="${MCAST_PORT:-1234}"
+ROUTER_WAN_MAC="${ROUTER_WAN_MAC:-52:54:00:12:34:01}"
+ROUTER_LAN_MAC="${ROUTER_LAN_MAC:-52:54:00:12:34:02}"
+CLIENT_MAC="${CLIENT_MAC:-52:54:00:12:34:10}"
 
 CLIENT_SERIAL_LOG=""
 CLIENT_PID=""
@@ -92,6 +93,7 @@ cleanup() {
 trap cleanup EXIT
 
 preflight() {
+    landscape_prepare_test_environment
     info "Preflight checks..."
 
     ensure_image_exists "${IMAGE_PATH}" || {
@@ -111,8 +113,11 @@ preflight() {
     load_landscape_topology || exit 2
     landscape_router_init_paths "dataplane"
 
-    CLIENT_SERIAL_LOG="${LANDSCAPE_TEST_LOG_DIR}/dataplane-serial-client.log"
-    CLIENT_DIAGNOSTICS_FILE="${LANDSCAPE_TEST_LOG_DIR}/dataplane-client-diagnostics.txt"
+    local artifact_suffix=""
+
+    artifact_suffix="$(landscape_test_artifact_suffix)"
+    CLIENT_SERIAL_LOG="${LANDSCAPE_TEST_LOG_DIR}/dataplane${artifact_suffix}-serial-client.log"
+    CLIENT_DIAGNOSTICS_FILE="${LANDSCAPE_TEST_LOG_DIR}/dataplane${artifact_suffix}-client-diagnostics.txt"
     CLIENT_RESULTS_FILE="${LANDSCAPE_RESULTS_FILE}"
     rm -f "${CLIENT_SERIAL_LOG}" "${CLIENT_DIAGNOSTICS_FILE}"
 
@@ -120,16 +125,16 @@ preflight() {
     LANDSCAPE_TEST_LANDSCAPE_VERSION="${LANDSCAPE_TEST_LANDSCAPE_VERSION:-$(resolve_default_landscape_version)}"
     landscape_write_test_metadata "${IMAGE_PATH}"
 
-    ROUTER_WAN_DEVICE_OPTS=",mac=${ROUTER_WAN_MAC}"
-    ROUTER_LAN_DEVICE_OPTS=",mac=${ROUTER_LAN_MAC}"
-    ROUTER_WAN_NETDEV="user,id=wan,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${WEB_PORT}-:${LANDSCAPE_CONTROL_PORT}"
-    ROUTER_LAN_NETDEV="socket,id=lan,mcast=${MCAST_ADDR}:${MCAST_PORT}"
+    ROUTER_WAN_DEVICE_OPTS="${ROUTER_WAN_DEVICE_OPTS:-,mac=${ROUTER_WAN_MAC}}"
+    ROUTER_LAN_DEVICE_OPTS="${ROUTER_LAN_DEVICE_OPTS:-,mac=${ROUTER_LAN_MAC}}"
+    ROUTER_WAN_NETDEV="${ROUTER_WAN_NETDEV:-user,id=wan,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${WEB_PORT}-:${LANDSCAPE_CONTROL_PORT}}"
+    ROUTER_LAN_NETDEV="${ROUTER_LAN_NETDEV:-socket,id=lan,mcast=${MCAST_ADDR}:${MCAST_PORT}}"
 
     ok "Preflight passed"
 }
 
 download_cirros() {
-    local download_dir="${PROJECT_DIR}/work/downloads/cirros/${CIRROS_VERSION}"
+    local download_dir="${CIRROS_CACHE_DIR}/${CIRROS_VERSION}"
     local cirros_file="${download_dir}/cirros-${CIRROS_VERSION}-x86_64-disk.img"
     local actual_md5=""
 

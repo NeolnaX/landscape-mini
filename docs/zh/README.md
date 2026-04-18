@@ -104,6 +104,79 @@ INCLUDE_DOCKER=true RUN_TEST=readiness,dataplane make build
 make test-serial
 ```
 
+默认情况下，`make test` / `make test-dataplane` 会自动处理本地并行运行所需的端口、日志目录，以及 dataplane 的 mcast / 临时 work 目录：
+
+- 未显式传 `SSH_PORT` / `WEB_PORT` 时，会自动分配可用端口
+- `test-dataplane` 未显式传 `MCAST_PORT` 时，也会自动分配可用 mcast 端口
+- 如果默认 `output/test-logs` 或 dataplane cache 目录不可写（例如 build 产物由 root 创建），测试会自动切到 `/tmp` 下的可写临时目录
+- 想固定资源时，仍可像以前一样显式传 `SSH_PORT` / `WEB_PORT` / `MCAST_PORT`
+
+例如：
+
+```bash
+# 默认直接跑；并行开多个也会自动避让
+make test
+make test-dataplane
+
+# 并行跑多个构建目录
+make test OUTPUT_DIR=output/p1 WORK_DIR=work/p1 &
+make test OUTPUT_DIR=output/p2 WORK_DIR=work/p2 &
+wait
+
+# 仍可手动固定端口 / mcast
+make test SSH_PORT=2229 WEB_PORT=9809
+make test-dataplane SSH_PORT=2230 WEB_PORT=9810 MCAST_PORT=1240
+```
+
+建议把 `test` / `test-dataplane` 当作默认入口；只有在你明确要复用固定端口或调试特定镜像时，再直接调用脚本并传参。
+
+```bash
+ssh -o StrictHostKeyChecking=no -p 2222 root@localhost
+```
+仅适用于你手动固定了端口，或者在 `make test-serial` / `make test-gui` 这种固定网络配置下调试。自动分配端口的测试会在日志里打印实际分配结果。
+
+> `make test-serial` / `make test-gui` 仍使用固定端口和固定网络参数，便于交互调试；自动分配逻辑只用于 `make test`、`make test-dataplane` 以及对应脚本。
+
+> dataplane 调度规则仍然基于 `include_docker=false`，不是旧的 variant 名称。
+
+> 自动分配逻辑实现位于 `tests/local-runtime.sh`。
+
+> 如果你显式传了端口 / mcast / MAC，测试会尊重你的设置，不会自动改写。
+
+> 如需彻底关闭自动分配，可传 `LANDSCAPE_TEST_AUTO_ALLOCATE=0`。
+
+例如：
+
+```bash
+LANDSCAPE_TEST_AUTO_ALLOCATE=0 make test SSH_PORT=2222 WEB_PORT=9800
+LANDSCAPE_TEST_AUTO_ALLOCATE=0 make test-dataplane SSH_PORT=2224 WEB_PORT=9802 MCAST_PORT=1234
+```
+
+如果关闭自动分配，请自己保证端口、日志目录和 dataplane 网络资源不冲突。
+
+> 常见本地用法：默认直接 `make test` / `make test-dataplane`；只有需要稳定复用某组端口时再显式覆盖。
+
+```bash
+# 查看当前默认说明
+make help
+```
+
+help 中的 `test SSH port=auto` / `test Web port=auto` / `dataplane mcast=auto:auto` 表示本地测试会自动分配这些资源；`serial SSH` / `serial Web` 则是 `make test-serial` / `make test-gui` 固定使用的端口。
+
+如果你显式传了变量，help 会显示你指定的值。
+
+```bash
+make help SSH_PORT=2229 WEB_PORT=9809 MCAST_PORT=1240
+```
+
+这样更适合需要固定端口做抓包或外部联调的场景。
+
+```bash
+# dataplane 也支持固定 MAC
+make test-dataplane ROUTER_WAN_MAC=52:54:00:12:34:44 ROUTER_LAN_MAC=52:54:00:12:35:44 CLIENT_MAC=52:54:00:12:36:44
+```
+
+通常不需要手动改 MAC；只有你要复现实验网络或对接特定外部工具时再传。
 ## 部署
 
 ### 物理机 / U 盘
