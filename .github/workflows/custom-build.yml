@@ -423,7 +423,7 @@ jobs:
           for asset in release-assets/*; do
             name="$(basename "$asset")"
             case "$name" in
-              build-metadata.txt|effective-landscape_init.toml)
+              build-metadata.txt|effective-landscape_init.toml|*.img|*.vmdk)
                 continue
                 ;;
             esac
@@ -458,7 +458,14 @@ jobs:
             gh release delete "$RELEASE_TAG" --repo "$GH_REPO" --yes --cleanup-tag
           fi
 
-          gh release create "$RELEASE_TAG" release-assets/* \
+          shopt -s nullglob
+          release_files=(release-assets/*.img.gz release-assets/*.ova release-assets/*.vmdk.gz)
+          if [ ${#release_files[@]} -eq 0 ]; then
+            echo "No publishable release assets were prepared" >&2
+            exit 1
+          fi
+
+          gh release create "$RELEASE_TAG" "${release_files[@]}" \
             --repo "$GH_REPO" \
             --target "$GITHUB_SHA" \
             --title "Custom Build Latest" \
@@ -489,15 +496,11 @@ jobs:
 
           has_ova=false
           has_img_gz=false
-          has_img=false
           case ",$produced_files," in
             *,*.ova,*) has_ova=true ;;
           esac
           case ",$produced_files," in
             *,*.img.gz,*) has_img_gz=true ;;
-          esac
-          case ",$produced_files," in
-            *,*.img,*) has_img=true ;;
           esac
 
           {
@@ -516,9 +519,6 @@ jobs:
             fi
             if [ "$has_img_gz" = true ]; then
               echo '- 下载 `.img.gz`：压缩后的 raw 安装镜像'
-            fi
-            if [ "$has_img" = true ]; then
-              echo '- 下载 `.img`：raw 写盘、手动导盘或兜底镜像'
             fi
             echo '- `build-metadata.txt` 记录本次 tuple 与实际产物'
             echo '- `effective-landscape_init.toml` 记录最终生效的网络配置'
