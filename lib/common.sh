@@ -821,6 +821,15 @@ LANDSCAPE_ADMIN_PASS=${LANDSCAPE_ADMIN_PASS}
 EOF
     chmod 600 "${ROOTFS_DIR}/etc/landscape/runtime.env"
 
+    # Install login welcome script
+    if [[ -f "${SCRIPT_DIR}/rootfs/etc/profile.d/welcome.sh" ]]; then
+        echo "  Installing login welcome script ..."
+        mkdir -p "${ROOTFS_DIR}/etc/profile.d"
+        cp "${SCRIPT_DIR}/rootfs/etc/profile.d/welcome.sh" \
+            "${ROOTFS_DIR}/etc/profile.d/welcome.sh"
+        chmod +x "${ROOTFS_DIR}/etc/profile.d/welcome.sh"
+    fi
+
     # Install expand-rootfs script
     echo "  Installing expand-rootfs script ..."
     mkdir -p "${ROOTFS_DIR}/usr/local/bin"

@@ -265,14 +265,42 @@ EOF
     echo "  Enabling sshd ..."
     run_in_chroot "systemctl enable ssh.service"
 
-    # ---- Allow root password login via SSH ----
-    echo "  Configuring SSH root login ..."
+    # ---- Clear default login banners ----
+    echo "  Clearing default login banners ..."
+    : > "${ROOTFS_DIR}/etc/motd"
+    : > "${ROOTFS_DIR}/etc/issue"
+    : > "${ROOTFS_DIR}/etc/issue.net"
+
+    # ---- Configure SSH login output ----
+    echo "  Configuring SSH login output ..."
     mkdir -p "${ROOTFS_DIR}/etc/ssh/sshd_config.d"
     cat > "${ROOTFS_DIR}/etc/ssh/sshd_config.d/root-login.conf" <<EOF
 PermitRootLogin yes
+PrintMotd no
+PrintLastLog no
 AcceptEnv LANG
 SetEnv LANG=${LOCALE} LC_ALL=${LOCALE}
 EOF
+
+    echo "  Disabling PAM MOTD banner for SSH and console logins ..."
+    if [[ -f "${ROOTFS_DIR}/etc/pam.d/sshd" ]]; then
+        sed -i '/pam_motd\.so/s/^/# /' "${ROOTFS_DIR}/etc/pam.d/sshd"
+    fi
+    if [[ -f "${ROOTFS_DIR}/etc/pam.d/login" ]]; then
+        sed -i '/pam_motd\.so/s/^/# /' "${ROOTFS_DIR}/etc/pam.d/login"
+    fi
+
+    if [[ -f "${ROOTFS_DIR}/etc/pam.d/login" ]]; then
+        sed -i '/pam_lastlog\.so/s/^/# /' "${ROOTFS_DIR}/etc/pam.d/login"
+    fi
+
+    if [[ -f "${ROOTFS_DIR}/etc/pam.d/sshd" ]]; then
+        sed -i '/pam_lastlog\.so/s/^/# /' "${ROOTFS_DIR}/etc/pam.d/sshd"
+    fi
+
+    if [[ -f "${ROOTFS_DIR}/etc/login.defs" ]]; then
+        sed -i 's/^MOTD_FILE.*/MOTD_FILE	/' "${ROOTFS_DIR}/etc/login.defs"
+    fi
 
     # ---- Disable unnecessary network services ----
     echo "  Disabling conflicting network services ..."
